@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install sdl3 cmake
+
+      - name: Configure
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j$(sysctl -n hw.logicalcpu)
+
+      - name: Package
+        run: |
+          cd build
+          # Remove symlinks and extra bloat from the bundle for distribution
+          rm -rf kopi.app/Contents/MacOS/_deps
+          # Create dmg
+          hdiutil create -volname kopi -srcfolder kopi.app -ov -format UDZO kopi.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kopi-macos-arm64
+          path: build/kopi.dmg
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/kopi.dmg
+          generate_release_notes: true
