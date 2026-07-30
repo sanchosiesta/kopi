@@ -68,8 +68,9 @@ Check terminal output: `kopi ERROR: Accessibility permission missing!` means it'
 | `G` (Shift+G) | Jump to last entry |
 | `Ctrl+D` | Page down |
 | `Ctrl+U` | Page up |
-| `Escape` | Exit search / hide window |
+| `Escape` | Clear filter → exit search → hide window (3-stage) |
 | `Ctrl+[` | Same as Escape |
+| `Enter` (in search) | Confirm search, select first match |
 | `Ctrl+Q` | Quit |
 
 ## Tech stack

@@ -223,16 +223,21 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
     // Keys that ALWAYS work, even in search mode
     // ------------------------------------------------------------------
 
-    // Escape / Ctrl+[ : exit search mode, or hide window (normal mode)
+    // --- Escape / Ctrl+[ (three-stage in search mode) ---
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
         (ImGui::IsKeyPressed(ImGuiKey_LeftBracket) &&
          ImGui::IsKeyDown(ImGuiKey_LeftCtrl))) {
         if (app.search_mode()) {
-            app.set_search_mode(false);
-            app.set_search_filter("");
+            if (!app.search_filter().empty()) {
+                // First ESC in search: clear filter, stay in search mode
+                app.set_search_filter("");
+            } else {
+                // Second ESC in search: exit search mode, keep full list
+                app.set_search_mode(false);
+            }
             return true;
         }
-        // Normal mode: Escape hides the window (like Cmd+W / vim's :q)
+        // Normal mode: Escape hides the window
         kopi_hide_window(window);
         visible = false;
         return true;
@@ -378,10 +383,18 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
             ImGui::SetKeyboardFocusHere(0);
         }
 
-        ImGuiInputTextFlags flags = ImGuiInputTextFlags_AutoSelectAll;
-        if (ImGui::InputTextWithHint("##search", "/ search …", buf,
-                                     sizeof(buf), flags)) {
+        ImGuiInputTextFlags flags =
+            ImGuiInputTextFlags_AutoSelectAll |
+            ImGuiInputTextFlags_EnterReturnsTrue;
+        bool confirmed = ImGui::InputTextWithHint("##search", "/ search …", buf,
+                                                  sizeof(buf), flags);
+        if (confirmed) {
             app.set_search_filter(buf);
+            // Enter in search mode → confirm, exit search, select first item
+            if (app.search_mode()) {
+                app.set_search_mode(false);
+                app.set_selected(0);
+            }
         }
         if (app.search_mode() && !ImGui::IsItemActive()) {
             // User clicked away — exit search mode but keep filter
