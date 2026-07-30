@@ -17,22 +17,95 @@ static Uint32            g_sdl_event   = 0;
 static pid_t             g_previous_pid = 0;
 
 // ============================================================================
-// NSApplication delegate — handles status-item clicks
+// Menu bar status item
 // ============================================================================
 
-@interface KopiAppDelegate : NSObject <NSApplicationDelegate>
+@interface KopiMenuTarget : NSObject
+- (void)toggleWindow:(id)sender;
+- (void)quitApp:(id)sender;
 @end
 
-@implementation KopiAppDelegate
-- (void)statusItemClicked:(id)sender
-{
+@implementation KopiMenuTarget
+- (void)toggleWindow:(id)sender {
     (void)sender;
     SDL_Event evt{};
     evt.type      = g_sdl_event;
     evt.user.code = 1;
     SDL_PushEvent(&evt);
 }
+- (void)quitApp:(id)sender {
+    (void)sender;
+    SDL_Event evt{};
+    evt.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&evt);
+}
 @end
+
+static NSStatusItem*   g_status_item = nil;
+static KopiMenuTarget* g_menu_target = nil;
+
+void kopi_init_status_bar()
+{
+    @autoreleasepool {
+        if (g_status_item) return;
+
+        g_menu_target = [[KopiMenuTarget alloc] init];
+        // Hard retain — survives autorelease pool regardless of ARC/CMake caching
+        CFRetain((__bridge CFTypeRef)g_menu_target);
+
+        g_status_item = [NSStatusBar.systemStatusBar statusItemWithLength:28.0];
+        CFRetain((__bridge CFTypeRef)g_status_item);
+
+        g_status_item.button.title = @"k";
+        g_status_item.button.font = [NSFont boldSystemFontOfSize:14.0];
+
+        // Left-click: toggle window
+        g_status_item.button.action = @selector(toggleWindow:);
+        g_status_item.button.target = g_menu_target;
+
+        // Dropdown menu
+        NSMenu* menu = [[NSMenu alloc] init];
+        NSMenuItem* quitItem = [[NSMenuItem alloc]
+            initWithTitle:@"Quit kopi"
+                   action:@selector(quitApp:)
+            keyEquivalent:@"q"];
+        quitItem.target = g_menu_target;
+        [menu addItem:quitItem];
+
+        g_status_item.menu = menu;
+        g_status_item.visible = YES;
+    }
+
+    SDL_Log("kopi: status bar icon created");
+}
+
+void kopi_remove_status_item()
+{
+    if (g_status_item) {
+        [NSStatusBar.systemStatusBar removeStatusItem:g_status_item];
+        CFRelease((__bridge CFTypeRef)g_status_item);
+        g_status_item = nil;
+    }
+    if (g_menu_target) {
+        CFRelease((__bridge CFTypeRef)g_menu_target);
+        g_menu_target = nil;
+    }
+}
+
+// ============================================================================
+// Accessibility permission
+// ============================================================================
+
+void kopi_request_accessibility()
+{
+    NSDictionary* options = @{(__bridge id)kAXTrustedCheckOptionPrompt: @YES};
+    bool trusted = AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options);
+    if (!trusted) {
+        SDL_Log("kopi WARNING: Accessibility permissions missing. Prompting user...");
+    } else {
+        SDL_Log("kopi: Accessibility permission granted");
+    }
+}
 
 // ============================================================================
 // Paste simulation
@@ -42,25 +115,21 @@ static void simulate_paste()
 {
     if (!AXIsProcessTrusted()) {
         SDL_Log("kopi ERROR: Accessibility permission missing! "
-                "Enable kopi (or your Terminal) under System Settings > "
-                "Privacy & Security > Accessibility.");
+                "Add kopi.app to System Settings > Privacy & Security > Accessibility.");
         return;
     }
 
-    // Private event source — uncouples from physical keyboard state
     CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStatePrivate);
     if (!source) return;
 
-    // Key code 9 = 'v' on ANSI layout
     CGEventRef v_down = CGEventCreateKeyboardEvent(source, (CGKeyCode)9, true);
     CGEventSetFlags(v_down, kCGEventFlagMaskCommand);
 
     CGEventRef v_up = CGEventCreateKeyboardEvent(source, (CGKeyCode)9, false);
     CGEventSetFlags(v_up, kCGEventFlagMaskCommand);
 
-    // Post to HID level — treated identically to a physical key press
     CGEventPost(kCGHIDEventTap, v_down);
-    usleep(20000);  // 20 ms press duration
+    usleep(20000);
     CGEventPost(kCGHIDEventTap, v_up);
 
     CFRelease(v_down);
@@ -116,64 +185,6 @@ void kopi_unregister_hotkey()
         g_hotkey_ref = nullptr;
     }
     g_hotkey_ready = false;
-}
-
-// ============================================================================
-// Window show/hide
-// ============================================================================
-
-// ============================================================================
-// Menu bar status item
-// ============================================================================
-
-static NSStatusItem* g_status_item = nil;
-
-void kopi_create_status_item(SDL_Window* /*sdl_win*/)
-{
-    @autoreleasepool {
-        // Use our own delegate instance — do NOT overwrite NSApp.delegate
-        // because SDL3 relies on its own delegate for event handling.
-        static KopiAppDelegate* delegate = [[KopiAppDelegate alloc] init];
-
-        g_status_item = [NSStatusBar.systemStatusBar
-            statusItemWithLength:NSVariableStatusItemLength];
-
-        // Use SF Symbol "clipboard" as the menu bar icon
-        NSImage* icon = [NSImage imageWithSystemSymbolName:@"clipboard"
-                                  accessibilityDescription:@"kopi"];
-        if (icon) {
-            [icon setTemplate:YES];  // adapts to light/dark menu bar
-            g_status_item.button.image = icon;
-        } else {
-            g_status_item.button.title = @"📋";
-        }
-
-        // Left-click: toggle window (same as Cmd+8)
-        g_status_item.button.action = @selector(statusItemClicked:);
-        g_status_item.button.target = delegate;
-
-        // Right-click menu
-        NSMenu* menu = [[NSMenu alloc] init];
-        NSMenuItem* toggleItem = [menu addItemWithTitle:@"Toggle kopi"
-                                                 action:@selector(statusItemClicked:)
-                                          keyEquivalent:@""];
-        toggleItem.target = delegate;
-        [menu addItem:[NSMenuItem separatorItem]];
-        [menu addItemWithTitle:@"Quit"
-                        action:@selector(terminate:)
-                 keyEquivalent:@"q"];
-        g_status_item.menu = menu;
-    }
-
-    SDL_Log("kopi: menu bar icon created");
-}
-
-void kopi_remove_status_item()
-{
-    if (g_status_item) {
-        [NSStatusBar.systemStatusBar removeStatusItem:g_status_item];
-        g_status_item = nil;
-    }
 }
 
 // ============================================================================
@@ -242,14 +253,10 @@ void kopi_copy_and_paste(const char* text)
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         @autoreleasepool {
-            // Wait deterministically for kopi to lose the active state
             for (int i = 0; i < 50; ++i) {
-                if (![NSApp isActive]) {
-                    break;
-                }
+                if (![NSApp isActive]) break;
                 usleep(10000);
             }
-
             usleep(50000);
             simulate_paste();
         }

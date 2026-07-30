@@ -56,6 +56,9 @@ target_include_directories(kopi PRIVATE
 
 target_link_libraries(kopi PRIVATE SDL3::SDL3 ${KOPI_EXTRA_LIBS})
 
+# Enable ARC for Objective-C++ — prevents NSStatusItem from being
+target_compile_options(kopi PRIVATE -fobjc-arc)
+
 # macOS: hide from Dock (accessory app)
 if(APPLE)
     set_target_properties(kopi PROPERTIES

@@ -15,8 +15,11 @@ void kopi_hide_window(SDL_Window* sdl_win);
 /// Call AFTER hiding the window with kopi_hide_window.
 void kopi_copy_and_paste(const char* text);
 
-/// Create a menu bar icon (NSStatusItem).  Click toggles the window.
-void kopi_create_status_item(SDL_Window* sdl_win);
+/// Create the macOS status bar icon (a bold 'k').  Click toggles the window.
+void kopi_init_status_bar();
 
-/// Remove the menu bar icon (called at shutdown).
+/// Remove the status bar icon (called at shutdown).
 void kopi_remove_status_item();
+
+/// Request Accessibility permission at startup (shows system dialog if needed).
+void kopi_request_accessibility();

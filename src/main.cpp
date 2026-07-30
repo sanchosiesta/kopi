@@ -33,18 +33,20 @@ int main(int, char**) {
     SDL_Renderer* renderer = nullptr;
     if (!init_sdl(window, renderer)) return 1;
 
+    // --- Request Accessibility permission (shows system dialog if needed) ---
+    kopi_request_accessibility();
+
     // --- Register global hotkey (Cmd+8) ---
     Uint32 hotkey_event = kopi_register_hotkey();
 
     // --- Create menu bar icon ---
-    kopi_create_status_item(window);
+    kopi_init_status_bar();
 
     // --- Our app ---
     kopi::App app;
 
-    // Start hidden — user summons with Cmd+8
+    // Window created hidden (SDL_WINDOW_HIDDEN) — no need to hide here
     bool window_visible = false;
-    kopi_hide_window(window);
 
     // --- Main loop ---
     bool done = false;
@@ -114,7 +116,7 @@ static void draw_frame(SDL_Renderer* renderer) {
     SDL_SetRenderScale(renderer,
                        ImGui::GetIO().DisplayFramebufferScale.x,
                        ImGui::GetIO().DisplayFramebufferScale.y);
-    SDL_SetRenderDrawColor(renderer, 20, 20, 24, 255);
+    SDL_SetRenderDrawColor(renderer, 240, 240, 245, 255);
     SDL_RenderClear(renderer);
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
     SDL_RenderPresent(renderer);
@@ -133,7 +135,7 @@ static bool init_sdl(SDL_Window*& window, SDL_Renderer*& renderer) {
     // Create window
     window = SDL_CreateWindow("kopi — clipboard manager",
                               900, 600,
-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
     if (!window) {
         SDL_Log("SDL_CreateWindow error: %s", SDL_GetError());
         SDL_Quit();
@@ -160,7 +162,7 @@ static bool init_sdl(SDL_Window*& window, SDL_Renderer*& renderer) {
     io.IniFilename = nullptr; // don't persist imgui state
 
     // Style
-    ImGui::StyleColorsDark();
+    ImGui::StyleColorsLight();
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowRounding = 6.0f;
     style.FrameRounding = 4.0f;
@@ -423,9 +425,9 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
             bool is_selected = (i == sel);
             if (is_selected) {
                 ImGui::PushStyleColor(ImGuiCol_Header,
-                                      ImVec4(0.25f, 0.45f, 0.75f, 0.55f));
+                                      ImVec4(0.40f, 0.60f, 0.90f, 0.50f));
                 ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
-                                      ImVec4(0.30f, 0.50f, 0.80f, 0.65f));
+                                      ImVec4(0.45f, 0.65f, 0.95f, 0.60f));
             }
 
             // Format: [N] HH:MM:SS | first line of content (trimmed)
