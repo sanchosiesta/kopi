@@ -21,5 +21,14 @@ void kopi_init_status_bar();
 /// Remove the status bar icon (called at shutdown).
 void kopi_remove_status_item();
 
+/// Toggle launching at login (macOS 13+).  Returns new state.
+bool kopi_toggle_login_item();
+
+/// Query whether login item is currently registered.
+bool kopi_is_login_item();
+
+/// Get the native macOS pasteboard change count (for efficient polling).
+int64_t kopi_get_clipboard_change_count();
+
 /// Request Accessibility permission at startup (shows system dialog if needed).
 void kopi_request_accessibility();

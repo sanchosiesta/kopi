@@ -39,7 +39,7 @@ set(KOPI_SOURCES
 # macOS-specific: global hotkey via Carbon
 if(APPLE)
     list(APPEND KOPI_SOURCES src/hotkey_macos.mm)
-    set(KOPI_EXTRA_LIBS "-framework Carbon -framework AppKit -framework CoreGraphics -framework ApplicationServices")
+    set(KOPI_EXTRA_LIBS "-framework Carbon -framework AppKit -framework CoreGraphics -framework ApplicationServices -framework ServiceManagement")
 endif()
 
 add_executable(kopi

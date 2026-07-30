@@ -77,6 +77,7 @@ private:
 
     std::string last_clipboard_;
     std::chrono::steady_clock::time_point last_poll_;
+    int64_t last_change_count_ = 0;
 
     std::filesystem::path history_path_;
 };

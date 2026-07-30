@@ -1,4 +1,5 @@
 #include "kopi.hpp"
+#include "hotkey_macos.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -136,6 +137,12 @@ bool App::poll_clipboard() {
     if (now - last_poll_ < kPollInterval) return false;
     last_poll_ = now;
 
+    // Fast O(1) integer check — avoids memory allocation when idle
+    int64_t current_count = kopi_get_clipboard_change_count();
+    if (current_count == last_change_count_) return false;
+    last_change_count_ = current_count;
+
+    // Change confirmed — now pull the string
     std::string current = system_clipboard();
     if (current.empty() || current == last_clipboard_) return false;
 

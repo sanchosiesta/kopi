@@ -8,6 +8,7 @@
 
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
+#import <ServiceManagement/ServiceManagement.h>
 #include <atomic>
 
 static std::atomic<bool> g_hotkey_ready{false};
@@ -23,6 +24,7 @@ static pid_t             g_previous_pid = 0;
 @interface KopiMenuTarget : NSObject
 - (void)toggleWindow:(id)sender;
 - (void)quitApp:(id)sender;
+- (void)toggleLoginItem:(id)sender;
 @end
 
 @implementation KopiMenuTarget
@@ -38,6 +40,10 @@ static pid_t             g_previous_pid = 0;
     SDL_Event evt{};
     evt.type = SDL_EVENT_QUIT;
     SDL_PushEvent(&evt);
+}
+- (void)toggleLoginItem:(id)sender {
+    (void)sender;
+    kopi_toggle_login_item();
 }
 @end
 
@@ -65,6 +71,17 @@ void kopi_init_status_bar()
 
         // Dropdown menu
         NSMenu* menu = [[NSMenu alloc] init];
+
+        NSMenuItem* loginItem = [[NSMenuItem alloc]
+            initWithTitle:@"Launch at Login"
+                   action:@selector(toggleLoginItem:)
+            keyEquivalent:@""];
+        loginItem.target = g_menu_target;
+        loginItem.state = kopi_is_login_item() ? NSControlStateValueOn : NSControlStateValueOff;
+        [menu addItem:loginItem];
+
+        [menu addItem:[NSMenuItem separatorItem]];
+
         NSMenuItem* quitItem = [[NSMenuItem alloc]
             initWithTitle:@"Quit kopi"
                    action:@selector(quitApp:)
@@ -243,6 +260,45 @@ void kopi_hide_window(SDL_Window* sdl_win)
 // Copy + paste
 // ============================================================================
 
+// ============================================================================
+// Login item (auto-start with system) — macOS 13+
+// ============================================================================
+
+bool kopi_is_login_item()
+{
+    @autoreleasepool {
+        SMAppService* service = SMAppService.mainAppService;
+        return service.status == SMAppServiceStatusEnabled;
+    }
+}
+
+bool kopi_toggle_login_item()
+{
+    @autoreleasepool {
+        SMAppService* service = SMAppService.mainAppService;
+        NSError* error = nil;
+
+        if (service.status == SMAppServiceStatusEnabled) {
+            [service unregisterAndReturnError:&error];
+        } else {
+            [service registerAndReturnError:&error];
+        }
+
+        if (error) {
+            SDL_Log("kopi: login item toggle error: %s",
+                    error.localizedDescription.UTF8String);
+        }
+
+        bool enabled = (service.status == SMAppServiceStatusEnabled);
+        SDL_Log("kopi: launch at login = %s", enabled ? "ON" : "OFF");
+        return enabled;
+    }
+}
+
+// ============================================================================
+// Copy + paste
+// ============================================================================
+
 void kopi_copy_and_paste(const char* text)
 {
     @autoreleasepool {
@@ -261,4 +317,15 @@ void kopi_copy_and_paste(const char* text)
             simulate_paste();
         }
     });
+}
+
+// ============================================================================
+// Clipboard Optimization
+// ============================================================================
+
+int64_t kopi_get_clipboard_change_count()
+{
+    @autoreleasepool {
+        return [NSPasteboard.generalPasteboard changeCount];
+    }
 }
