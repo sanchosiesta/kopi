@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <string_view>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -248,6 +249,49 @@ void App::recalc_filtered() {
 size_t App::real_index(size_t filtered_pos) const {
     if (filtered_pos >= filtered_indices_.size()) return SIZE_MAX;
     return filtered_indices_[filtered_pos];
+}
+
+// ============================================================================
+// Multi-select
+// ============================================================================
+
+bool App::is_selected(size_t filtered_pos) const {
+    return selected_indices_.contains(filtered_pos);
+}
+
+bool App::toggle_selection(size_t filtered_pos) {
+    if (filtered_pos >= filtered_indices_.size()) return false;
+    auto [it, inserted] = selected_indices_.insert(filtered_pos);
+    if (!inserted) {
+        selected_indices_.erase(it);
+        return false;
+    }
+    return true;
+}
+
+void App::clear_selection() {
+    selected_indices_.clear();
+}
+
+size_t App::selection_count() const {
+    return selected_indices_.size();
+}
+
+std::string App::merge_selected() const {
+    if (selected_indices_.empty()) return {};
+
+    // Collect selected entries in display order
+    std::vector<size_t> ordered(selected_indices_.begin(), selected_indices_.end());
+    std::sort(ordered.begin(), ordered.end());
+
+    std::string result;
+    for (auto fp : ordered) {
+        size_t ri = real_index(fp);
+        if (ri == SIZE_MAX) continue;
+        if (!result.empty()) result += '\n';
+        result += entries_[ri].text;
+    }
+    return result;
 }
 
 } // namespace kopi

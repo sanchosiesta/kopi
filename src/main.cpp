@@ -328,10 +328,25 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
         return true;
     }
 
-    // --- Enter / y / l: copy selected, hide, and paste into previous app ---
+    // --- Space: toggle selection on current item ---
+    if (pressed(ImGuiKey_Space)) {
+        app.toggle_selection(app.selected());
+        return true;
+    }
+
+    // --- Enter / y / l: paste selected items, or single item ---
     if (pressed(ImGuiKey_Enter) || pressed(ImGuiKey_KeypadEnter) ||
         pressed(ImGuiKey_Y) || pressed(ImGuiKey_L)) {
-        if (auto ri = app.real_index(app.selected()); ri != SIZE_MAX) {
+        if (app.selection_count() > 0) {
+            // Merge selected entries into one, copy+paste, clear selection
+            std::string merged = app.merge_selected();
+            if (!merged.empty()) {
+                app.clear_selection();
+                kopi_hide_window(window);
+                visible = false;
+                kopi_copy_and_paste(merged.c_str());
+            }
+        } else if (auto ri = app.real_index(app.selected()); ri != SIZE_MAX) {
             kopi_hide_window(window);
             visible = false;
             kopi_copy_and_paste(app.entries()[ri].text.c_str());
@@ -425,64 +440,83 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                       ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_HorizontalScrollbar);
 
+    // Fixed height per item: up to 10 lines of text
+    float line_h = ImGui::GetTextLineHeightWithSpacing();
+    constexpr int kMaxLines = 10;
+    float item_h = line_h * kMaxLines + 4.0f;
+
     ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(filtered.size()),
-                  ImGui::GetTextLineHeightWithSpacing());
+    clipper.Begin(static_cast<int>(filtered.size()), item_h);
     while (clipper.Step()) {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
             size_t real_idx = filtered[static_cast<size_t>(i)];
             if (real_idx >= entries.size()) continue;
             const auto& e = entries[real_idx];
 
-            // Selection highlight
-            bool is_selected = (i == sel);
-            if (is_selected) {
+            bool is_current = (i == sel);
+            bool is_picked = app.is_selected(i);
+
+            // Highlight: blue for current, green for multi-selected
+            if (is_current) {
                 ImGui::PushStyleColor(ImGuiCol_Header,
                                       ImVec4(0.40f, 0.60f, 0.90f, 0.50f));
                 ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
                                       ImVec4(0.45f, 0.65f, 0.95f, 0.60f));
+            } else if (is_picked) {
+                ImGui::PushStyleColor(ImGuiCol_Header,
+                                      ImVec4(0.30f, 0.70f, 0.40f, 0.45f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
+                                      ImVec4(0.35f, 0.75f, 0.45f, 0.55f));
             }
 
-            // Format: [N] HH:MM:SS | first line of content (trimmed)
+            // Build label: select mark, index, time
             auto tt = std::chrono::system_clock::to_time_t(e.timestamp);
             std::tm tm;
             localtime_r(&tt, &tm);
             char time_buf[32];
             std::strftime(time_buf, sizeof(time_buf), "%H:%M:%S", &tm);
 
-            std::string line = e.text;
-            auto nl = line.find('\n');
-            if (nl != std::string::npos)
-                line = line.substr(0, nl) + " …";
-            if (line.size() > 120)
-                line = line.substr(0, 117) + "…";
+            // Extract up to kMaxLines from the entry text
+            std::string preview = e.text;
+            int line_count = 0;
+            size_t pos = 0;
+            while (line_count < kMaxLines && pos < preview.size()) {
+                auto nl = preview.find('\n', pos);
+                if (nl == std::string::npos) {
+                    line_count++;
+                    break;
+                }
+                pos = nl + 1;
+                line_count++;
+            }
+            if (pos > 0 && pos < preview.size()) {
+                preview = preview.substr(0, pos) + "…";
+            }
+            // Trim very long lines
+            if (preview.size() > 200)
+                preview = preview.substr(0, 197) + "…";
 
-            char label[512];
-            std::snprintf(label, sizeof(label), "%3zu  %s  %s",
-                          real_idx + 1, time_buf, line.c_str());
+            char label[1024];
+            std::snprintf(label, sizeof(label), "%s %3zu  %s\n%s",
+                          is_picked ? "[✓]" : "[ ]",
+                          real_idx + 1, time_buf, preview.c_str());
 
             ImGuiSelectableFlags sflags =
                 ImGuiSelectableFlags_SpanAllColumns |
                 ImGuiSelectableFlags_AllowOverlap;
-            if (ImGui::Selectable(label, is_selected, sflags)) {
+            if (ImGui::Selectable(label, is_current, sflags,
+                                  ImVec2(0, item_h))) {
                 app.set_selected(i);
             }
 
-            // Double-click copies
+            // Double-click copies single item
             if (ImGui::IsItemHovered() &&
                 ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 app.copy_to_clipboard(real_idx);
             }
 
-            if (is_selected) {
+            if (is_current || is_picked) {
                 ImGui::PopStyleColor(2);
-                // Scroll to keep visible
-                if (ImGui::IsKeyPressed(ImGuiKey_J) ||
-                    ImGui::IsKeyPressed(ImGuiKey_K) ||
-                    ImGui::IsKeyPressed(ImGuiKey_DownArrow) ||
-                    ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-                    // ImGui auto-scrolls for Selectable when keyboard-navigated
-                }
             }
         }
     }
@@ -497,26 +531,16 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
 
     // --- Status bar / keybindings hint ---
     {
-        // Show preview of selected entry
-        if (sel >= 0 && static_cast<size_t>(sel) < filtered.size()) {
-            size_t real_idx = filtered[static_cast<size_t>(sel)];
-            if (real_idx < entries.size()) {
-                const auto& e = entries[real_idx];
-                std::string preview = e.text;
-                auto nl = preview.find('\n');
-                if (nl != std::string::npos)
-                    preview = preview.substr(0, nl) + " …";
-                if (preview.size() > 150)
-                    preview = preview.substr(0, 147) + "…";
-
-                ImGui::TextDisabled("preview: %s", preview.c_str());
-            }
+        // Selection count
+        if (app.selection_count() > 0) {
+            ImGui::TextDisabled("%zu item(s) selected — Enter to merge & paste",
+                                app.selection_count());
         }
 
         // Keybinding hints
         ImGui::TextDisabled(
-            "j/k:nav  /:search  Enter/y/l:copy  dd:del  gg/G:top/bot  "
-            "Ctrl+D/U:page  Esc:hide  Ctrl+Q:quit");
+            "j/k:nav  /:search  Space:select  Enter/y/l:copy  "
+            "dd:del  gg/G:top/bot  Ctrl+D/U:page  Esc:hide  Ctrl+Q:quit");
 
 
     }

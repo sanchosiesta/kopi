@@ -5,6 +5,7 @@
 #include <deque>
 #include <filesystem>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace kopi {
@@ -65,6 +66,13 @@ public:
     /// Map filtered-list position → real entry index, or SIZE_MAX.
     size_t real_index(size_t filtered_pos) const;
 
+    // --- multi-select (indices into filtered_indices_) ---
+    bool is_selected(size_t filtered_pos) const;
+    bool toggle_selection(size_t filtered_pos);
+    void clear_selection();
+    size_t selection_count() const;
+    std::string merge_selected() const;  // concatenate selected entries
+
 private:
     void recalc_filtered();
     void add_entry(std::string text);
@@ -74,6 +82,7 @@ private:
     std::string search_filter_;
     bool search_mode_ = false;
     std::vector<size_t> filtered_indices_;  // indices into entries_
+    std::unordered_set<size_t> selected_indices_;  // indices into filtered_indices_
 
     std::string last_clipboard_;
     std::chrono::steady_clock::time_point last_poll_;

@@ -62,7 +62,8 @@ Check terminal output: `kopi ERROR: Accessibility permission missing!` means it'
 | `j` / `↓` | Move selection down |
 | `k` / `↑` | Move selection up |
 | `/` | Enter search mode |
-| `Enter` / `y` / `l` | Copy selected item + auto-paste + hide |
+| `Space` | Toggle multi-select on current item |
+| `Enter` / `y` / `l` | Paste selected item(s): merge if multi-selected, else single item |
 | `dd` | Delete selected entry |
 | `gg` | Jump to first entry |
 | `G` (Shift+G) | Jump to last entry |
