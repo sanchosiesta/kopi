@@ -36,6 +36,9 @@ int main(int, char**) {
     // --- Register global hotkey (Cmd+8) ---
     Uint32 hotkey_event = kopi_register_hotkey();
 
+    // --- Create menu bar icon ---
+    kopi_create_status_item(window);
+
     // --- Our app ---
     kopi::App app;
 
@@ -96,6 +99,7 @@ int main(int, char**) {
     }
 
     // --- Shutdown ---
+    kopi_remove_status_item();
     kopi_unregister_hotkey();
     cleanup_sdl(window, renderer);
     return 0;

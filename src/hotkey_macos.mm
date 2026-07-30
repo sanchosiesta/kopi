@@ -17,6 +17,24 @@ static Uint32            g_sdl_event   = 0;
 static pid_t             g_previous_pid = 0;
 
 // ============================================================================
+// NSApplication delegate — handles status-item clicks
+// ============================================================================
+
+@interface KopiAppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation KopiAppDelegate
+- (void)statusItemClicked:(id)sender
+{
+    (void)sender;
+    SDL_Event evt{};
+    evt.type      = g_sdl_event;
+    evt.user.code = 1;
+    SDL_PushEvent(&evt);
+}
+@end
+
+// ============================================================================
 // Paste simulation
 // ============================================================================
 
@@ -98,6 +116,64 @@ void kopi_unregister_hotkey()
         g_hotkey_ref = nullptr;
     }
     g_hotkey_ready = false;
+}
+
+// ============================================================================
+// Window show/hide
+// ============================================================================
+
+// ============================================================================
+// Menu bar status item
+// ============================================================================
+
+static NSStatusItem* g_status_item = nil;
+
+void kopi_create_status_item(SDL_Window* /*sdl_win*/)
+{
+    @autoreleasepool {
+        // Use our own delegate instance — do NOT overwrite NSApp.delegate
+        // because SDL3 relies on its own delegate for event handling.
+        static KopiAppDelegate* delegate = [[KopiAppDelegate alloc] init];
+
+        g_status_item = [NSStatusBar.systemStatusBar
+            statusItemWithLength:NSVariableStatusItemLength];
+
+        // Use SF Symbol "clipboard" as the menu bar icon
+        NSImage* icon = [NSImage imageWithSystemSymbolName:@"clipboard"
+                                  accessibilityDescription:@"kopi"];
+        if (icon) {
+            [icon setTemplate:YES];  // adapts to light/dark menu bar
+            g_status_item.button.image = icon;
+        } else {
+            g_status_item.button.title = @"📋";
+        }
+
+        // Left-click: toggle window (same as Cmd+8)
+        g_status_item.button.action = @selector(statusItemClicked:);
+        g_status_item.button.target = delegate;
+
+        // Right-click menu
+        NSMenu* menu = [[NSMenu alloc] init];
+        NSMenuItem* toggleItem = [menu addItemWithTitle:@"Toggle kopi"
+                                                 action:@selector(statusItemClicked:)
+                                          keyEquivalent:@""];
+        toggleItem.target = delegate;
+        [menu addItem:[NSMenuItem separatorItem]];
+        [menu addItemWithTitle:@"Quit"
+                        action:@selector(terminate:)
+                 keyEquivalent:@"q"];
+        g_status_item.menu = menu;
+    }
+
+    SDL_Log("kopi: menu bar icon created");
+}
+
+void kopi_remove_status_item()
+{
+    if (g_status_item) {
+        [NSStatusBar.systemStatusBar removeStatusItem:g_status_item];
+        g_status_item = nil;
+    }
 }
 
 // ============================================================================

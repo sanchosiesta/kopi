@@ -14,3 +14,9 @@ void kopi_hide_window(SDL_Window* sdl_win);
 /// simulate Cmd+V into the frontmost app.
 /// Call AFTER hiding the window with kopi_hide_window.
 void kopi_copy_and_paste(const char* text);
+
+/// Create a menu bar icon (NSStatusItem).  Click toggles the window.
+void kopi_create_status_item(SDL_Window* sdl_win);
+
+/// Remove the menu bar icon (called at shutdown).
+void kopi_remove_status_item();
