@@ -19,8 +19,8 @@
 
 static bool init_sdl(SDL_Window*& window, SDL_Renderer*& renderer);
 static void cleanup_sdl(SDL_Window* window, SDL_Renderer* renderer);
-static void render_ui(kopi::App& app, SDL_Window* window, bool& done);
-static bool handle_vim_keys(kopi::App& app, SDL_Window* window);
+static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visible);
+static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible);
 static void draw_frame(SDL_Renderer* renderer);
 
 // ============================================================================
@@ -89,7 +89,7 @@ int main(int, char**) {
             ImGui_ImplSDLRenderer3_NewFrame();
             ImGui::NewFrame();
 
-            render_ui(app, window, done);
+            render_ui(app, window, done, window_visible);
 
             draw_frame(renderer);
         }
@@ -210,7 +210,7 @@ static void cleanup_sdl(SDL_Window* window, SDL_Renderer* renderer) {
 // everything else goes to the search InputText.
 // When search mode is inactive, all vim navigation keys are active.
 
-static bool handle_vim_keys(kopi::App& app, SDL_Window* window) {
+static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
     ImGuiIO& io = ImGui::GetIO();
 
     // ------------------------------------------------------------------
@@ -228,6 +228,7 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window) {
         }
         // Normal mode: Escape hides the window (like Cmd+W / vim's :q)
         kopi_hide_window(window);
+        visible = false;
         return true;
     }
 
@@ -321,6 +322,7 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window) {
         pressed(ImGuiKey_Y) || pressed(ImGuiKey_L)) {
         if (auto ri = app.real_index(app.selected()); ri != SIZE_MAX) {
             kopi_hide_window(window);
+            visible = false;
             kopi_copy_and_paste(app.entries()[ri].text.c_str());
         }
         return true;
@@ -333,8 +335,8 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window) {
 // ImGui UI
 // ============================================================================
 
-static void render_ui(kopi::App& app, SDL_Window* window, bool& done) {
-    handle_vim_keys(app, window);
+static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visible) {
+    handle_vim_keys(app, window, visible);
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->Pos);
