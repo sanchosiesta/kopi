@@ -329,3 +329,46 @@ int64_t kopi_get_clipboard_change_count()
         return [NSPasteboard.generalPasteboard changeCount];
     }
 }
+
+// ============================================================================
+// MIME capture / restore
+// ============================================================================
+
+int kopi_capture_mime(std::vector<std::string>& out_types,
+                      std::vector<std::vector<uint8_t>>& out_data)
+{
+    @autoreleasepool {
+        NSPasteboard* pb = NSPasteboard.generalPasteboard;
+        NSArray<NSPasteboardType>* types = pb.types;
+
+        out_types.clear();
+        out_data.clear();
+
+        for (NSPasteboardType type in types) {
+            NSData* nsdata = [pb dataForType:type];
+            if (!nsdata) continue;
+
+            out_types.push_back(type.UTF8String);
+            const uint8_t* bytes = (const uint8_t*)nsdata.bytes;
+            out_data.emplace_back(bytes, bytes + nsdata.length);
+        }
+
+        return (int)out_types.size();
+    }
+}
+
+void kopi_restore_mime(const std::vector<std::string>& types,
+                        const std::vector<std::vector<uint8_t>>& data)
+{
+    @autoreleasepool {
+        NSPasteboard* pb = NSPasteboard.generalPasteboard;
+        [pb clearContents];
+
+        size_t n = std::min(types.size(), data.size());
+        for (size_t i = 0; i < n; ++i) {
+            NSData* nsdata = [NSData dataWithBytes:data[i].data()
+                                            length:data[i].size()];
+            [pb setData:nsdata forType:@(types[i].c_str())];
+        }
+    }
+}

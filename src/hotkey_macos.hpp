@@ -2,6 +2,10 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
 /// Register the global Cmd+8 hotkey.
 Uint32 kopi_register_hotkey();
 void   kopi_unregister_hotkey();
@@ -29,6 +33,15 @@ bool kopi_is_login_item();
 
 /// Get the native macOS pasteboard change count (for efficient polling).
 int64_t kopi_get_clipboard_change_count();
+
+/// Capture all MIME types from the pasteboard into parallel vectors.
+/// Returns number of types captured.
+int kopi_capture_mime(std::vector<std::string>& out_types,
+                      std::vector<std::vector<uint8_t>>& out_data);
+
+/// Restore MIME data to the pasteboard (for rich paste).
+void kopi_restore_mime(const std::vector<std::string>& types,
+                        const std::vector<std::vector<uint8_t>>& data);
 
 /// Request Accessibility permission at startup (shows system dialog if needed).
 void kopi_request_accessibility();

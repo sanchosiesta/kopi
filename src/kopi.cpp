@@ -62,6 +62,25 @@ static std::string base64_decode(std::string_view in) {
     return out;
 }
 
+static std::vector<uint8_t> base64_decode_bytes(std::string_view in) {
+    std::vector<uint8_t> out;
+    out.reserve(3 * in.size() / 4);
+    int val = 0;
+    int bits = -8;
+    for (unsigned char c : in) {
+        if (c == '=') break;
+        auto p = std::find(std::begin(kBase64), std::end(kBase64), c);
+        if (p == std::end(kBase64)) continue;
+        val = (val << 6) + static_cast<int>(p - std::begin(kBase64));
+        bits += 6;
+        if (bits >= 0) {
+            out.push_back(static_cast<uint8_t>((val >> bits) & 0xFF));
+            bits -= 8;
+        }
+    }
+    return out;
+}
+
 // ============================================================================
 // Persistence: store in ~/.local/share/kopi/history.dat
 // Format: one entry per line:  timestamp<TAB>base64_content
@@ -91,21 +110,52 @@ void App::load() {
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty()) continue;
-        // Split on first TAB
-        auto tab = line.find('\t');
-        if (tab == std::string::npos) continue;
 
-        std::string ts_str = line.substr(0, tab);
-        std::string content = base64_decode(line.substr(tab + 1));
+        // Tokens: timestamp, mime_count, [type, b64_data]*, text_b64
+        std::vector<std::string_view> tokens;
+        size_t pos = 0;
+        while (pos < line.size()) {
+            auto tab = line.find('\t', pos);
+            if (tab == std::string::npos) {
+                tokens.push_back(std::string_view(line).substr(pos));
+                break;
+            }
+            tokens.push_back(std::string_view(line).substr(pos, tab - pos));
+            pos = tab + 1;
+        }
+        if (tokens.size() < 2) continue;
 
         Entry e;
-        e.text = std::move(content);
-        // Timestamp stored as Unix time integer (seconds)
-        int64_t unix_sec = std::stoll(ts_str);
+        int64_t unix_sec = std::stoll(std::string(tokens[0]));
         e.timestamp = std::chrono::system_clock::from_time_t(
             static_cast<std::time_t>(unix_sec));
-        entries_.push_back(std::move(e));
-        if (entries_.size() >= kMaxHistory) break;
+
+        // Detect format: token[1] is a MIME count (new) or base64 text (old)
+        int mime_count = 0;
+        bool is_new_format = false;
+        try {
+            mime_count = std::stoi(std::string(tokens[1]));
+            is_new_format = true;
+        } catch (...) {}
+
+        if (is_new_format) {
+            size_t idx = 2;
+            for (int i = 0; i < mime_count && idx + 1 < tokens.size(); ++i) {
+                MimeData m;
+                m.type = tokens[idx++];
+                m.bytes = base64_decode_bytes(tokens[idx++]);
+                e.mime_data.push_back(std::move(m));
+            }
+            if (idx < tokens.size())
+                e.text = base64_decode(tokens[idx]);
+        } else {
+            e.text = base64_decode(tokens[1]);
+        }
+
+        if (!e.text.empty() || !e.mime_data.empty()) {
+            entries_.push_back(std::move(e));
+            if (entries_.size() >= kMaxHistory) break;
+        }
     }
     recalc_filtered();
     if (!filtered_indices_.empty()) selected_ = 0;
@@ -117,7 +167,14 @@ void App::save() {
     for (auto& e : entries_) {
         auto unix_sec = std::chrono::system_clock::to_time_t(e.timestamp);
         out << static_cast<int64_t>(unix_sec) << '\t'
-            << base64_encode(e.text) << '\n';
+            << e.mime_data.size();
+        for (auto& m : e.mime_data) {
+            out << '\t' << m.type
+                << '\t' << base64_encode(std::string_view(
+                    reinterpret_cast<const char*>(m.bytes.data()),
+                    m.bytes.size()));
+        }
+        out << '\t' << base64_encode(e.text) << '\n';
     }
 }
 
@@ -147,27 +204,55 @@ bool App::poll_clipboard() {
     std::string current = system_clipboard();
     if (current.empty() || current == last_clipboard_) return false;
 
-    add_entry(std::move(current));
+    // Ignore whitespace-only blobs
+    if (std::all_of(current.begin(), current.end(),
+                    [](unsigned char c) { return std::isspace(c); }))
+        return false;
+
+    Entry e;
+    e.text = current;
+    e.timestamp = std::chrono::system_clock::now();
+
+    // Capture MIME data if enabled
+    if (mime_capture_) {
+        std::vector<std::string> types;
+        std::vector<std::vector<uint8_t>> data;
+        int n = kopi_capture_mime(types, data);
+        for (int i = 0; i < n; ++i) {
+            e.mime_data.push_back({std::move(types[i]), std::move(data[i])});
+        }
+    }
+
+    add_entry(std::move(e));
     return true;
 }
 
 void App::copy_to_clipboard(size_t index) {
     if (index >= entries_.size()) return;
-    SDL_SetClipboardText(entries_[index].text.c_str());
+    const auto& e = entries_[index];
+
+    if (!e.mime_data.empty()) {
+        // Restore all MIME types for rich paste
+        std::vector<std::string> types;
+        std::vector<std::vector<uint8_t>> data;
+        for (auto& m : e.mime_data) {
+            types.push_back(m.type);
+            data.push_back(m.bytes);
+        }
+        kopi_restore_mime(types, data);
+    } else {
+        SDL_SetClipboardText(e.text.c_str());
+    }
 }
 
 // ============================================================================
 // History management
 // ============================================================================
 
-void App::add_entry(std::string text) {
-    // Remove any existing identical entries (full dedup).
-    std::erase_if(entries_, [&](const Entry& e) { return e.text == text; });
+void App::add_entry(Entry e) {
+    // Remove any existing identical entries (full dedup by text).
+    std::erase_if(entries_, [&](const Entry& ex) { return ex.text == e.text; });
 
-    // Add at front.
-    Entry e;
-    e.text      = text;
-    e.timestamp = std::chrono::system_clock::now();
     entries_.push_front(std::move(e));
     last_clipboard_ = entries_.front().text; // copy
 

@@ -60,6 +60,20 @@ int main(int, char**) {
         // Process all SDL events
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            // Intercept Ctrl+J/K before ImGui — works even when InputText is focused
+            if (window_visible &&
+                event.type == SDL_EVENT_KEY_DOWN &&
+                (event.key.mod & SDL_KMOD_CTRL)) {
+                if (event.key.key == SDLK_J) {
+                    app.move_selection(+1);
+                    continue;  // don't pass to ImGui
+                }
+                if (event.key.key == SDLK_K) {
+                    app.move_selection(-1);
+                    continue;  // don't pass to ImGui
+                }
+            }
+
             ImGui_ImplSDL3_ProcessEvent(&event);
 
             if (event.type == SDL_EVENT_QUIT) {
@@ -223,30 +237,25 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
     // Keys that ALWAYS work, even in search mode
     // ------------------------------------------------------------------
 
-    // --- Escape / Ctrl+[ (three-stage in search mode) ---
+    // --- Escape / Ctrl+[ ---
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
         (ImGui::IsKeyPressed(ImGuiKey_LeftBracket) &&
          ImGui::IsKeyDown(ImGuiKey_LeftCtrl))) {
-        if (app.search_mode()) {
-            if (!app.search_filter().empty()) {
-                // First ESC in search: clear filter, stay in search mode
-                app.set_search_filter("");
-            } else {
-                // Second ESC in search: exit search mode, keep full list
-                app.set_search_mode(false);
-            }
+        if (app.search_input_focused()) {
+            // Exit search input → focus returns to list, filter stays
+            app.set_search_mode(false);
             return true;
         }
-        // Normal mode: Escape hides the window
+        // Normal mode: hide window
         kopi_hide_window(window);
         visible = false;
         return true;
     }
 
     // ------------------------------------------------------------------
-    // Keys that only work in normal mode (search inactive)
+    // Keys that only work when search input is NOT focused
     // ------------------------------------------------------------------
-    if (app.search_mode())
+    if (app.search_input_focused())
         return false;
 
     auto pressed = [](ImGuiKey k) { return ImGui::IsKeyPressed(k); };
@@ -398,19 +407,21 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
             ImGui::SetKeyboardFocusHere(0);
         }
 
-        ImGuiInputTextFlags flags =
-            ImGuiInputTextFlags_AutoSelectAll |
-            ImGuiInputTextFlags_EnterReturnsTrue;
-        bool confirmed = ImGui::InputTextWithHint("##search", "/ search …", buf,
-                                                  sizeof(buf), flags);
-        if (confirmed) {
+        ImGuiInputTextFlags flags = ImGuiInputTextFlags_AutoSelectAll;
+        if (ImGui::InputTextWithHint("##search", "/ search …", buf,
+                                     sizeof(buf), flags)) {
             app.set_search_filter(buf);
-            // Enter in search mode → confirm, exit search, select first item
-            if (app.search_mode()) {
-                app.set_search_mode(false);
-                app.set_selected(0);
-            }
         }
+        app.set_search_input_focused(ImGui::IsItemActive());
+
+        // Enter pressed while search is active → confirm, exit, select first
+        if (app.search_mode() && ImGui::IsItemFocused() &&
+            (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+             ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))) {
+            app.set_search_mode(false);
+            app.set_selected(0);
+        }
+
         if (app.search_mode() && !ImGui::IsItemActive()) {
             // User clicked away — exit search mode but keep filter
             app.set_search_mode(false);
@@ -440,23 +451,83 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                       ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_HorizontalScrollbar);
 
-    // Fixed height per item: up to 10 lines of text
     float line_h = ImGui::GetTextLineHeightWithSpacing();
     constexpr int kMaxLines = 10;
-    float item_h = line_h * kMaxLines + 4.0f;
+    constexpr float kPad = 4.0f;
 
-    ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(filtered.size()), item_h);
-    while (clipper.Step()) {
-        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+    // Pre-compute line counts and heights for each visible item
+    struct ItemInfo {
+        int lines;
+        float height;
+        std::string preview;  // truncated text
+    };
+    std::vector<ItemInfo> infos(filtered.size());
+    float total_h = 0;
+    for (size_t i = 0; i < filtered.size(); ++i) {
+        size_t ri = filtered[i];
+        const auto& e = entries[ri];
+
+        // Count preview lines (max kMaxLines), +1 for the header line
+        int lc = 1;
+        for (size_t pos = 0; pos < e.text.size(); ) {
+            auto nl = e.text.find('\n', pos);
+            if (nl == std::string::npos || lc >= kMaxLines) break;
+            lc++;
+            pos = nl + 1;
+        }
+        int total_lines = std::min(lc + 1, kMaxLines + 1);  // header + preview
+
+        // Truncate preview to kMaxLines
+        std::string prev = e.text;
+        int seen = 0;
+        size_t cut = 0;
+        while (seen < kMaxLines && cut < prev.size()) {
+            auto nl = prev.find('\n', cut);
+            if (nl == std::string::npos) { seen++; break; }
+            cut = nl + 1;
+            seen++;
+        }
+        if (cut > 0 && cut < prev.size()) prev = prev.substr(0, cut) + "…";
+        if (prev.size() > 200) prev = prev.substr(0, 197) + "…";
+
+        float h = total_lines * line_h + kPad;
+        infos[i] = {total_lines, h, std::move(prev)};
+        total_h += h;
+    }
+
+    // Ensure selected item is visible
+    if (sel >= 0 && sel < static_cast<int>(infos.size())) {
+        float sel_top = 0;
+        for (int i = 0; i < sel; ++i) sel_top += infos[i].height;
+        float sel_bot = sel_top + infos[sel].height;
+        float scroll_y = ImGui::GetScrollY();
+        float win_h = ImGui::GetWindowHeight();
+        if (sel_top < scroll_y)
+            ImGui::SetScrollY(sel_top);
+        else if (sel_bot > scroll_y + win_h)
+            ImGui::SetScrollY(sel_bot - win_h);
+    }
+
+    // Manual virtual list with variable heights
+    float scroll_y = ImGui::GetScrollY();
+    float win_h = ImGui::GetWindowHeight();
+    float cursor_y = 0;
+
+    // We don't use clipper.Step() — handle visibility manually
+
+    for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
+        float item_h = infos[i].height;
+
+        // Only render if visible
+        if (cursor_y + item_h > scroll_y && cursor_y < scroll_y + win_h) {
             size_t real_idx = filtered[static_cast<size_t>(i)];
-            if (real_idx >= entries.size()) continue;
             const auto& e = entries[real_idx];
+
+            ImGui::SetCursorPosY(cursor_y);
 
             bool is_current = (i == sel);
             bool is_picked = app.is_selected(i);
 
-            // Highlight: blue for current, green for multi-selected
             if (is_current) {
                 ImGui::PushStyleColor(ImGuiCol_Header,
                                       ImVec4(0.40f, 0.60f, 0.90f, 0.50f));
@@ -469,37 +540,31 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                                       ImVec4(0.35f, 0.75f, 0.45f, 0.55f));
             }
 
-            // Build label: select mark, index, time
             auto tt = std::chrono::system_clock::to_time_t(e.timestamp);
             std::tm tm;
             localtime_r(&tt, &tm);
             char time_buf[32];
             std::strftime(time_buf, sizeof(time_buf), "%H:%M:%S", &tm);
 
-            // Extract up to kMaxLines from the entry text
-            std::string preview = e.text;
-            int line_count = 0;
-            size_t pos = 0;
-            while (line_count < kMaxLines && pos < preview.size()) {
-                auto nl = preview.find('\n', pos);
-                if (nl == std::string::npos) {
-                    line_count++;
-                    break;
+            // MIME type badges
+            std::string badges;
+            if (!e.mime_data.empty()) {
+                bool has_html = false, has_rtf = false, has_img = false;
+                for (auto& m : e.mime_data) {
+                    if (m.type.find("html") != std::string::npos) has_html = true;
+                    else if (m.type.find("rtf") != std::string::npos) has_rtf = true;
+                    else if (m.type.find("image") != std::string::npos) has_img = true;
                 }
-                pos = nl + 1;
-                line_count++;
+                if (has_html) badges += "[H]";
+                if (has_rtf)  badges += "[R]";
+                if (has_img)  badges += "[I]";
             }
-            if (pos > 0 && pos < preview.size()) {
-                preview = preview.substr(0, pos) + "…";
-            }
-            // Trim very long lines
-            if (preview.size() > 200)
-                preview = preview.substr(0, 197) + "…";
 
             char label[1024];
-            std::snprintf(label, sizeof(label), "%s %3zu  %s\n%s",
+            std::snprintf(label, sizeof(label), "%s %3zu  %s %s\n%s",
                           is_picked ? "[✓]" : "[ ]",
-                          real_idx + 1, time_buf, preview.c_str());
+                          real_idx + 1, time_buf, badges.c_str(),
+                          infos[i].preview.c_str());
 
             ImGuiSelectableFlags sflags =
                 ImGuiSelectableFlags_SpanAllColumns |
@@ -509,7 +574,6 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                 app.set_selected(i);
             }
 
-            // Double-click copies single item
             if (ImGui::IsItemHovered() &&
                 ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 app.copy_to_clipboard(real_idx);
@@ -519,8 +583,12 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                 ImGui::PopStyleColor(2);
             }
         }
+
+        cursor_y += item_h;
     }
-    clipper.End();
+
+    // Set total scrollable content height
+    ImGui::SetCursorPosY(total_h);
 
     // If list is empty
     if (filtered.empty()) {
@@ -537,10 +605,16 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                                 app.selection_count());
         }
 
+        // MIME capture toggle
+        bool mime = app.mime_capture();
+        if (ImGui::Checkbox("Capture rich content (HTML/images/etc.)", &mime)) {
+            app.set_mime_capture(mime);
+        }
+
         // Keybinding hints
         ImGui::TextDisabled(
-            "j/k:nav  /:search  Space:select  Enter/y/l:copy  "
-            "dd:del  gg/G:top/bot  Ctrl+D/U:page  Esc:hide  Ctrl+Q:quit");
+            "j/k or Ctrl+j/k:nav  /:search  Space:select  Enter/y/l:copy  "
+            "dd:del  gg/G:top/bot  Ctrl+D/U:page  Esc:list→hide  Ctrl+Q:quit");
 
 
     }
