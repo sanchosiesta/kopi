@@ -337,6 +337,42 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
         return true;
     }
 
+    // --- z prefix: track for zz / zt / zb ---
+    {
+        static auto last_z_time = std::chrono::steady_clock::now();
+        if (pressed(ImGuiKey_Z)) {
+            auto now = std::chrono::steady_clock::now();
+            if (app.last_key_was_z() &&
+                now - last_z_time < std::chrono::milliseconds(500)) {
+                app.set_scroll_pos(kopi::App::ScrollPos::Center);
+                app.set_last_key_z(false);
+                return true;
+            }
+            app.set_last_key_z(true);
+            last_z_time = now;
+            return true;
+        }
+        if (pressed(ImGuiKey_T) && app.last_key_was_z()) {
+            app.set_scroll_pos(kopi::App::ScrollPos::Top);
+            app.set_last_key_z(false);
+            return true;
+        }
+        if (pressed(ImGuiKey_B) && app.last_key_was_z()) {
+            app.set_scroll_pos(kopi::App::ScrollPos::Bottom);
+            app.set_last_key_z(false);
+            return true;
+        }
+        // Any other key resets the z prefix
+        if (app.last_key_was_z() &&
+            (pressed(ImGuiKey_J) || pressed(ImGuiKey_K) ||
+             pressed(ImGuiKey_Escape) || pressed(ImGuiKey_Slash) ||
+             pressed(ImGuiKey_Enter) || pressed(ImGuiKey_Y) ||
+             pressed(ImGuiKey_L) || pressed(ImGuiKey_Space) ||
+             pressed(ImGuiKey_D) || pressed(ImGuiKey_G))) {
+            app.set_last_key_z(false);
+        }
+    }
+
     // --- Space: toggle selection on current item ---
     if (pressed(ImGuiKey_Space)) {
         app.toggle_selection(app.selected());
@@ -495,17 +531,33 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
         total_h += h;
     }
 
-    // Ensure selected item is visible
+    // Handle zz/zt/zb scroll requests
     if (sel >= 0 && sel < static_cast<int>(infos.size())) {
         float sel_top = 0;
         for (int i = 0; i < sel; ++i) sel_top += infos[i].height;
-        float sel_bot = sel_top + infos[sel].height;
-        float scroll_y = ImGui::GetScrollY();
+        float sel_h = infos[sel].height;
         float win_h = ImGui::GetWindowHeight();
-        if (sel_top < scroll_y)
+        float scroll_y = ImGui::GetScrollY();
+
+        switch (app.scroll_pos()) {
+        case kopi::App::ScrollPos::Center:
+            ImGui::SetScrollY(sel_top - (win_h - sel_h) * 0.5f);
+            break;
+        case kopi::App::ScrollPos::Top:
             ImGui::SetScrollY(sel_top);
-        else if (sel_bot > scroll_y + win_h)
-            ImGui::SetScrollY(sel_bot - win_h);
+            break;
+        case kopi::App::ScrollPos::Bottom:
+            ImGui::SetScrollY(sel_top + sel_h - win_h);
+            break;
+        default:
+            // Auto-scroll to keep selected item visible
+            if (sel_top < scroll_y)
+                ImGui::SetScrollY(sel_top);
+            else if (sel_top + sel_h > scroll_y + win_h)
+                ImGui::SetScrollY(sel_top + sel_h - win_h);
+            break;
+        }
+        app.set_scroll_pos(kopi::App::ScrollPos::None);
     }
 
     // Manual virtual list with variable heights

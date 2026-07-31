@@ -57,6 +57,13 @@ public:
     const std::deque<Entry>& entries() const { return entries_; }
     void delete_entry(size_t index);
 
+    // --- scroll-to-view ---
+    enum class ScrollPos { None, Center, Top, Bottom };
+    void set_scroll_pos(ScrollPos sp) { scroll_pos_ = sp; }
+    ScrollPos scroll_pos() const { return scroll_pos_; }
+    bool last_key_was_z() const { return last_key_z_; }
+    void set_last_key_z(bool v) { last_key_z_ = v; }
+
     // --- selection ---
     int selected() const { return selected_; }
     void set_selected(int s);
@@ -96,6 +103,8 @@ private:
     std::string search_filter_;
     bool search_mode_ = false;
     bool search_input_focused_ = false;
+    ScrollPos scroll_pos_ = ScrollPos::None;
+    bool last_key_z_ = false;
     std::vector<size_t> filtered_indices_;  // indices into entries_
     std::unordered_set<size_t> selected_indices_;  // indices into filtered_indices_
 
