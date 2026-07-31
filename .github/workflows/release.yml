@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -41,4 +44,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/kopi.dmg
-          generate_release_notes: true
+          body: "See [README.md](https://github.com/sanchosiesta/kopi/blob/main/README.md) for full documentation."
