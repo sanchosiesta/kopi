@@ -383,7 +383,6 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
     if (pressed(ImGuiKey_Enter) || pressed(ImGuiKey_KeypadEnter) ||
         pressed(ImGuiKey_Y) || pressed(ImGuiKey_L)) {
         if (app.selection_count() > 0) {
-            // Merge selected entries into one, copy+paste, clear selection
             std::string merged = app.merge_selected();
             if (!merged.empty()) {
                 app.clear_selection();
@@ -392,9 +391,11 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
                 kopi_copy_and_paste(merged.c_str());
             }
         } else if (auto ri = app.real_index(app.selected()); ri != SIZE_MAX) {
+            // Restore MIME data (or plain text) to clipboard, then paste
+            app.copy_to_clipboard(ri);
             kopi_hide_window(window);
             visible = false;
-            kopi_copy_and_paste(app.entries()[ri].text.c_str());
+            kopi_paste();
         }
         return true;
     }

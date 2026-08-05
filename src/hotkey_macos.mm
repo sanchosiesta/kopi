@@ -306,14 +306,16 @@ void kopi_copy_and_paste(const char* text)
         [NSPasteboard.generalPasteboard setString:@(text)
                                           forType:NSPasteboardTypeString];
     }
+    kopi_paste();
+}
 
+void kopi_paste()
+{
+    // We were previously hidden + deactivated by kopi_hide_window.
+    // Give the previous app ~150ms to take focus, then paste.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         @autoreleasepool {
-            for (int i = 0; i < 50; ++i) {
-                if (![NSApp isActive]) break;
-                usleep(10000);
-            }
-            usleep(50000);
+            usleep(150000);
             simulate_paste();
         }
     });

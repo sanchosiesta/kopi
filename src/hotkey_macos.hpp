@@ -19,6 +19,9 @@ void kopi_hide_window(SDL_Window* sdl_win);
 /// Call AFTER hiding the window with kopi_hide_window.
 void kopi_copy_and_paste(const char* text);
 
+/// Paste without touching the clipboard (assumes clipboard already set).
+void kopi_paste();
+
 /// Create the macOS status bar icon (a bold 'k').  Click toggles the window.
 void kopi_init_status_bar();
 
