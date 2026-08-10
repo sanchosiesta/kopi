@@ -80,6 +80,14 @@ public:
     void set_search_mode(bool m) { search_mode_ = m; if (!m) search_input_focused_ = false; }
     bool search_input_focused() const { return search_input_focused_; }
     void set_search_input_focused(bool f) { search_input_focused_ = f; }
+    void reset_search() {
+        search_mode_ = false;
+        search_filter_.clear();
+        search_input_focused_ = false;
+        clear_selection();
+        recalc_filtered();
+        if (!filtered_indices_.empty()) selected_ = 0;
+    }
 
     /// Returns the indices of entries that pass the current filter.
     const std::vector<size_t>& filtered_indices() const { return filtered_indices_; }

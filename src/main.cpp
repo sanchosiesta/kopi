@@ -84,6 +84,7 @@ int main(int, char**) {
             if (hotkey_event && event.type == hotkey_event) {
                 window_visible = !window_visible;
                 if (window_visible) {
+                    app.reset_search();
                     kopi_show_window(window);
                 } else {
                     kopi_hide_window(window);
