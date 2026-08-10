@@ -311,11 +311,21 @@ void kopi_copy_and_paste(const char* text)
 
 void kopi_paste()
 {
-    // We were previously hidden + deactivated by kopi_hide_window.
-    // Give the previous app ~150ms to take focus, then paste.
+    // Capture our PID on the main thread before dispatching.
+    pid_t ourPid = NSProcessInfo.processInfo.processIdentifier;
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         @autoreleasepool {
-            usleep(150000);
+            // Poll NSWorkspace (thread-safe for reading) until we're
+            // no longer the frontmost app — focus has transferred.
+            for (int i = 0; i < 50; ++i) {
+                NSRunningApplication* front =
+                    NSWorkspace.sharedWorkspace.frontmostApplication;
+                if (front && front.processIdentifier != ourPid) break;
+                usleep(10000);
+            }
+            // Extra buffer for the editor to be ready for input
+            usleep(50000);
             simulate_paste();
         }
     });
