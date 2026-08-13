@@ -408,6 +408,59 @@ static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
 // ImGui UI
 // ============================================================================
 
+// Word-wrap `text` to fit within `wrap_width` pixels (using the given font),
+// honoring existing newlines as paragraph breaks. Produces at most
+// `max_lines` visual rows; if the text doesn't fit, the result is suffixed
+// with a "\n…" continuation marker. Uses ImGui's own word-wrap algorithm
+// (ImFont::CalcWordWrapPositionA) so it matches how the text would actually
+// lay out if rendered with wrapping enabled.
+static std::string wrap_text_to_lines(const std::string& text, int max_lines,
+                                       float wrap_width, ImFont* font,
+                                       float font_scale) {
+    std::vector<std::string_view> lines;
+    bool truncated = false;
+    size_t pos = 0;
+
+    while (pos <= text.size()) {
+        if (static_cast<int>(lines.size()) >= max_lines) { truncated = true; break; }
+
+        auto nl = text.find('\n', pos);
+        size_t para_end = (nl == std::string::npos) ? text.size() : nl;
+        const char* p = text.c_str() + pos;
+        const char* p_end = text.c_str() + para_end;
+
+        if (p == p_end) {
+            lines.push_back(std::string_view());  // blank line
+        } else {
+            while (p < p_end) {
+                if (static_cast<int>(lines.size()) >= max_lines) { truncated = true; break; }
+                const char* wrap_at =
+                    font->CalcWordWrapPositionA(font_scale, p, p_end, wrap_width);
+                if (wrap_at <= p) wrap_at = p + 1;  // safety net; keeps forward progress
+                lines.push_back(std::string_view(p, static_cast<size_t>(wrap_at - p)));
+                p = wrap_at;
+                // Skip the blank(s) that caused the wrap, mirroring ImGui's
+                // own word-wrap rendering behavior.
+                while (p < p_end && (*p == ' ' || *p == '\t')) p++;
+            }
+            if (p < p_end) truncated = true;  // stopped mid-paragraph on max_lines
+        }
+
+        if (truncated) break;
+        if (nl == std::string::npos) break;  // consumed the last paragraph
+        pos = nl + 1;
+        if (pos >= text.size()) break;  // trailing newline, nothing follows
+    }
+
+    std::string out;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (i) out += '\n';
+        out += lines[i];
+    }
+    if (truncated) out += "\n…";
+    return out;
+}
+
 static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visible) {
     handle_vim_keys(app, window, visible);
 
@@ -486,12 +539,17 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
     if (list_h < 100.0f) list_h = 100.0f;
 
     ImGui::BeginChild("##entry_list", ImVec2(0, list_h),
-                      ImGuiChildFlags_Borders,
-                      ImGuiWindowFlags_HorizontalScrollbar);
+                      ImGuiChildFlags_Borders);
 
     float line_h = ImGui::GetTextLineHeightWithSpacing();
-    constexpr int kMaxLines = 10;
+    constexpr int kMaxLines = 13;
     constexpr float kPad = 4.0f;
+
+    // Wrap width: available row width, minus a small safety margin so
+    // wrapped text doesn't visually touch the scrollbar / right edge.
+    ImFont* font = ImGui::GetFont();
+    float font_scale = ImGui::GetFontSize() / font->FontSize;
+    float wrap_width = std::max(50.0f, ImGui::GetContentRegionAvail().x - 16.0f);
 
     // Pre-compute line counts and heights for each visible item
     struct ItemInfo {
@@ -505,28 +563,23 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
         size_t ri = filtered[i];
         const auto& e = entries[ri];
 
-        // Count preview lines (max kMaxLines), +1 for the header line
-        int lc = 1;
-        for (size_t pos = 0; pos < e.text.size(); ) {
-            auto nl = e.text.find('\n', pos);
-            if (nl == std::string::npos || lc >= kMaxLines) break;
-            lc++;
-            pos = nl + 1;
+        // Build preview: word-wrapped to fit the row width, capped at
+        // kMaxLines visual rows (as many as are actually present, up to
+        // that cap).
+        std::string prev;
+        if (e.text.empty() && !e.mime_data.empty()) {
+            // Rich-content-only entry (e.g. an image with no plain-text
+            // pasteboard flavor at all) — there's nothing to show as text,
+            // so use a placeholder instead of leaving the row blank.
+            prev = "(no text preview — rich content only)";
+        } else {
+            prev = wrap_text_to_lines(e.text, kMaxLines, wrap_width, font, font_scale);
         }
-        int total_lines = std::min(lc + 1, kMaxLines + 1);  // header + preview
 
-        // Truncate preview to kMaxLines
-        std::string prev = e.text;
-        int seen = 0;
-        size_t cut = 0;
-        while (seen < kMaxLines && cut < prev.size()) {
-            auto nl = prev.find('\n', cut);
-            if (nl == std::string::npos) { seen++; break; }
-            cut = nl + 1;
-            seen++;
-        }
-        if (cut > 0 && cut < prev.size()) prev = prev.substr(0, cut) + "…";
-        if (prev.size() > 200) prev = prev.substr(0, 197) + "…";
+        // Total rows = header line + however many lines ended up in prev.
+        int preview_lines = static_cast<int>(
+            std::count(prev.begin(), prev.end(), '\n')) + (prev.empty() ? 0 : 1);
+        int total_lines = 1 + preview_lines;
 
         float h = total_lines * line_h + kPad;
         infos[i] = {total_lines, h, std::move(prev)};
@@ -607,23 +660,32 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
                 for (auto& m : e.mime_data) {
                     if (m.type.find("html") != std::string::npos) has_html = true;
                     else if (m.type.find("rtf") != std::string::npos) has_rtf = true;
-                    else if (m.type.find("image") != std::string::npos) has_img = true;
+                    else if (m.type.find("image") != std::string::npos ||
+                             m.type.find("png") != std::string::npos ||
+                             m.type.find("tiff") != std::string::npos ||
+                             m.type.find("jpeg") != std::string::npos ||
+                             m.type.find("jpg") != std::string::npos ||
+                             m.type.find("gif") != std::string::npos ||
+                             m.type.find("bmp") != std::string::npos ||
+                             m.type.find("pict") != std::string::npos ||
+                             m.type.find("heic") != std::string::npos)
+                        has_img = true;
                 }
                 if (has_html) badges += "[H]";
                 if (has_rtf)  badges += "[R]";
                 if (has_img)  badges += "[I]";
             }
 
-            char label[1024];
-            std::snprintf(label, sizeof(label), "%s %3zu  %s %s\n%s",
+            char header[128];
+            std::snprintf(header, sizeof(header), "%s %3zu  %s %s",
                           is_picked ? "[✓]" : "[ ]",
-                          real_idx + 1, time_buf, badges.c_str(),
-                          infos[i].preview.c_str());
+                          real_idx + 1, time_buf, badges.c_str());
+            std::string label = std::string(header) + "\n" + infos[i].preview;
 
             ImGuiSelectableFlags sflags =
                 ImGuiSelectableFlags_SpanAllColumns |
                 ImGuiSelectableFlags_AllowOverlap;
-            if (ImGui::Selectable(label, is_current, sflags,
+            if (ImGui::Selectable(label.c_str(), is_current, sflags,
                                   ImVec2(0, item_h))) {
                 app.set_selected(i);
             }

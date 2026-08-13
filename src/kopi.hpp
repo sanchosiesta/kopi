@@ -117,6 +117,7 @@ private:
     std::unordered_set<size_t> selected_indices_;  // indices into filtered_indices_
 
     std::string last_clipboard_;
+    std::vector<MimeData> last_mime_;
     std::chrono::steady_clock::time_point last_poll_;
     int64_t last_change_count_ = 0;
     bool mime_capture_ = false;

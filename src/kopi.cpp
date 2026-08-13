@@ -190,6 +190,15 @@ std::string App::system_clipboard() {
     return s;
 }
 
+static bool mime_data_equal(const std::vector<MimeData>& a,
+                            const std::vector<MimeData>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].type != b[i].type || a[i].bytes != b[i].bytes) return false;
+    }
+    return true;
+}
+
 bool App::poll_clipboard() {
     auto now = std::chrono::steady_clock::now();
     if (now - last_poll_ < kPollInterval) return false;
@@ -202,27 +211,44 @@ bool App::poll_clipboard() {
 
     // Change confirmed — now pull the string
     std::string current = system_clipboard();
-    if (current.empty() || current == last_clipboard_) return false;
 
-    // Ignore whitespace-only blobs
-    if (std::all_of(current.begin(), current.end(),
-                    [](unsigned char c) { return std::isspace(c); }))
-        return false;
-
-    Entry e;
-    e.text = current;
-    e.timestamp = std::chrono::system_clock::now();
-
-    // Capture MIME data if enabled
+    // Capture MIME data if enabled. This must happen *before* we bail out
+    // on an empty plain-text string, since rich content (images, RTF,
+    // HTML, etc.) very often has no plain-text pasteboard flavor at all —
+    // e.g. a screenshot or an image copied from Preview/Finder.
+    std::vector<MimeData> mime;
     if (mime_capture_) {
         std::vector<std::string> types;
         std::vector<std::vector<uint8_t>> data;
         int n = kopi_capture_mime(types, data);
+        mime.reserve(static_cast<size_t>(n));
         for (int i = 0; i < n; ++i) {
-            e.mime_data.push_back({std::move(types[i]), std::move(data[i])});
+            mime.push_back({std::move(types[i]), std::move(data[i])});
         }
     }
 
+    // Nothing usable on the clipboard at all.
+    if (current.empty() && mime.empty()) return false;
+
+    // Ignore whitespace-only text blobs, but only when there's no rich
+    // content riding along with them — an image/HTML/RTF copy that has
+    // empty or whitespace-only plain text should still be captured.
+    bool whitespace_only_text = !current.empty() &&
+        std::all_of(current.begin(), current.end(),
+                    [](unsigned char c) { return std::isspace(c); });
+    if (mime.empty() && whitespace_only_text) return false;
+
+    // Skip if this is exactly the same content (text + MIME payloads) as
+    // what we already captured last time.
+    if (current == last_clipboard_ && mime_data_equal(mime, last_mime_))
+        return false;
+
+    Entry e;
+    e.text = current;
+    e.mime_data = mime;
+    e.timestamp = std::chrono::system_clock::now();
+
+    last_mime_ = std::move(mime);
     add_entry(std::move(e));
     return true;
 }
@@ -250,8 +276,13 @@ void App::copy_to_clipboard(size_t index) {
 // ============================================================================
 
 void App::add_entry(Entry e) {
-    // Remove any existing identical entries (full dedup by text).
-    std::erase_if(entries_, [&](const Entry& ex) { return ex.text == e.text; });
+    // Remove any existing identical entries (dedup by text *and* MIME
+    // payload). Comparing text alone would wrongly collapse distinct
+    // image/rich-content entries that happen to share the same, often
+    // empty, plain-text representation.
+    std::erase_if(entries_, [&](const Entry& ex) {
+        return ex.text == e.text && mime_data_equal(ex.mime_data, e.mime_data);
+    });
 
     entries_.push_front(std::move(e));
     last_clipboard_ = entries_.front().text; // copy
