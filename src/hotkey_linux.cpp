@@ -252,7 +252,6 @@ void kopi_init_status_bar() {
             dpy, root, 0, 0, 24, 24,
             0, CopyFromParent, InputOutput, CopyFromParent,
             CWEventMask | CWBackPixel, &attrs);
-        SDL_Log("kopi: tray icon window created (%ld)", (long)icon);
 
         // _XEMBED_INFO = { version 0, mapped 1 }.  Per the XEmbed convention
         // the property TYPE is the _XEMBED_INFO atom itself.
@@ -283,7 +282,7 @@ void kopi_init_status_bar() {
         dock.xclient.data.l[4]    = 0;
         XSendEvent(dpy, tray, False, NoEventMask, &dock);
         XFlush(dpy);
-        SDL_Log("kopi: tray dock request sent to %ld", (long)tray);
+        SDL_Log("kopi: tray icon requested docking");
 
         // GC + font for the "k".  The tray reparents and maps the icon after
         // docking; we paint it on Expose.
