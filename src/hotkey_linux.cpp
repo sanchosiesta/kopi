@@ -234,27 +234,29 @@ void kopi_init_status_bar() {
             return;
         }
 
-        // 24x24 icon window, light-gray background so the black "k" shows.
-        const Window icon = XCreateSimpleWindow(dpy, root, 0, 0, 24, 24,
-                                                0, 0, 0xE0E0E0);
+        // 24x24 icon window.  Inherit depth/visual from the root (robust on
+        // minimal toolbars) and use a light-gray background so the black
+        // "k" stays visible whatever the tray's theme.
+        XSetWindowAttributes attrs;
+        std::memset(&attrs, 0, sizeof(attrs));
+        attrs.event_mask       = ButtonPressMask | StructureNotifyMask |
+                                ExposureMask;
+        attrs.background_pixel = 0xE0E0E0;
+        const Window icon = XCreateWindow(
+            dpy, root, 0, 0, 24, 24,
+            0, CopyFromParent, InputOutput, CopyFromParent,
+            CWEventMask | CWBackPixel, &attrs);
 
-        // _XEMBED_INFO = { version 0, mapped 1 }.
+        // _XEMBED_INFO = { version 0, mapped 1 }.  Per the XEmbed convention
+        // the property TYPE is the _XEMBED_INFO atom itself.
         const Atom xembed = XInternAtom(dpy, "_XEMBED_INFO", False);
         const long embed_info[2] = { 0, 1 };
-        XChangeProperty(dpy, icon, xembed, XA_INTEGER, 32, PropModeReplace,
+        XChangeProperty(dpy, icon, xembed, xembed, 32, PropModeReplace,
                         reinterpret_cast<const unsigned char*>(embed_info), 2);
 
-        // Listen for clicks / reparent / expose on our icon window.
-        XSelectInput(dpy, icon, ButtonPressMask | StructureNotifyMask |
-                                ExposureMask);
-
-        // Map the icon *before* requesting docking — the tray reparents a
-        // mapped window into its socket.
-        XMapWindow(dpy, icon);
-        XFlush(dpy);
-
-        // Ask the tray to dock us: _NET_SYSTEM_TRAY_OPCODE,
-        // SYSTEM_TRAY_REQUEST_DOCK (0).
+        // Ask the tray to dock us: _NET_SYSTEM_TRAY_OPCODE with the
+        // SYSTEM_TRAY_REQUEST_DOCK (0) message.  Protocol data layout is
+        // { time, message, window }.
         const Atom opcode = XInternAtom(dpy, "_NET_SYSTEM_TRAY_OPCODE", False);
         XEvent dock;
         std::memset(&dock, 0, sizeof(dock));
@@ -262,28 +264,27 @@ void kopi_init_status_bar() {
         dock.xclient.window       = tray;
         dock.xclient.message_type = opcode;
         dock.xclient.format       = 32;
-        dock.xclient.data.l[0]    = 0;      // SYSTEM_TRAY_REQUEST_DOCK
-        dock.xclient.data.l[1]    = 0;      // timestamp
-        dock.xclient.data.l[2]    = icon;
+        dock.xclient.data.l[0]    = CurrentTime;   // time
+        dock.xclient.data.l[1]    = 0;             // SYSTEM_TRAY_REQUEST_DOCK
+        dock.xclient.data.l[2]    = icon;         // window to dock
         dock.xclient.data.l[3]    = 0;
         dock.xclient.data.l[4]    = 0;
         XSendEvent(dpy, tray, False, NoEventMask, &dock);
         XFlush(dpy);
 
+        // GC + font for the "k".  The tray reparents and maps the icon after
+        // docking; we paint it on Expose.
         GC gc = XCreateGC(dpy, icon, 0, nullptr);
         XSetForeground(dpy, gc, 0x000000);
         XFontStruct* font = XLoadQueryFont(dpy, "fixed");
         if (font)
             XSetFont(dpy, gc, font->fid);
 
-        // Draw the "k" once; redraw on Expose (the tray reparents the icon
-        // and may paint over it).
         auto draw_k = [&]() {
             if (font)
                 XDrawString(dpy, icon, gc, 4, 16, "k", 1);
             XFlush(dpy);
         };
-        draw_k();
 
         while (g_tray_running) {
             while (XPending(dpy)) {
