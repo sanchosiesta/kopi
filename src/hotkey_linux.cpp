@@ -244,6 +244,15 @@ void kopi_init_status_bar() {
         XChangeProperty(dpy, icon, xembed, XA_INTEGER, 32, PropModeReplace,
                         reinterpret_cast<const unsigned char*>(embed_info), 2);
 
+        // Listen for clicks / reparent / expose on our icon window.
+        XSelectInput(dpy, icon, ButtonPressMask | StructureNotifyMask |
+                                ExposureMask);
+
+        // Map the icon *before* requesting docking — the tray reparents a
+        // mapped window into its socket.
+        XMapWindow(dpy, icon);
+        XFlush(dpy);
+
         // Ask the tray to dock us: _NET_SYSTEM_TRAY_OPCODE,
         // SYSTEM_TRAY_REQUEST_DOCK (0).
         const Atom opcode = XInternAtom(dpy, "_NET_SYSTEM_TRAY_OPCODE", False);
@@ -260,10 +269,6 @@ void kopi_init_status_bar() {
         dock.xclient.data.l[4]    = 0;
         XSendEvent(dpy, tray, False, NoEventMask, &dock);
         XFlush(dpy);
-
-        // Listen for clicks / reparent / expose on our icon window.
-        XSelectInput(dpy, icon, ButtonPressMask | StructureNotifyMask |
-                                ExposureMask);
 
         GC gc = XCreateGC(dpy, icon, 0, nullptr);
         XSetForeground(dpy, gc, 0x000000);

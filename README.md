@@ -20,6 +20,7 @@ item — it pastes directly into your editor.
 - **Status/tray icon** — bold **k** in the menu bar (macOS) or system tray (Linux); click to toggle
 - **Launch at Login** — menu-bar toggle on macOS, or a checkbox in the UI on Linux (systemd autostart)
 - **Efficient clipboard polling** — macOS uses `NSPasteboard.changeCount` (O(1)); Linux hashes clipboard text
+- **Embedded font** — a subsetted JuliaMonoSiesta is baked into the binary, so the UI looks identical on every OS with no font dependency
 - **Light theme** — clean ImGui light style
 - **Background app** — no Dock icon on macOS
 
@@ -154,6 +155,7 @@ MIME API; on macOS it uses `NSPasteboard` types.
 | Hotkey | Carbon Event Manager (Cmd+8) | X11 `XGrabKey` (Alt+8) |
 | Paste | CGEvent HID tap | XTest `XTestFakeKeyEvent` |
 | Clipboard poll | `NSPasteboard.changeCount` (O(1)) | FNV-1a hash of clipboard text |
+| Font | embedded JuliaMonoSiesta (subsetted, gzip) | embedded JuliaMonoSiesta (subsetted, gzip) |
 | MIME | `NSPasteboard` types | SDL3 clipboard MIME API |
 | Status icon | `NSStatusItem` | X11 XEmbed tray client |
 | Login item | `SMAppService` | systemd autostart `.desktop` |

@@ -80,8 +80,13 @@ configure).  SDL3 is a system package; on Linux it must be SDL3, not SDL2.
 - **Launch at login (Linux)** — toggles a systemd autostart desktop entry at
   `~/.config/autostart/kopi.desktop`; exposed as a checkbox in the UI
   (`#ifdef __linux__` in `main.cpp`).  On macOS it lives in the tray menu.
-- **Fonts** — `main.cpp` tries a list of macOS + Linux monospace font paths
-  and falls back to `AddFontDefault()`.  Add new distro font paths there.
+- **Font** — an embedded, subsetted + gzip-compressed JuliaMonoSiesta lives in
+  `src/font_data.hpp` and is loaded via `AddFontFromMemoryCompressedTTF`, so
+  the look is identical on every OS.  Regenerate it with
+  `python3 packaging/make-font-header.py` (needs `pip install fonttools`).
+  OS monospace paths are a fallback only; `AddFontDefault()` is the last
+  resort.  Note `AddFontFromFileTTF` asserts on failure, so only pass paths
+  that exist.
 - **Objective-C++ ARC** — `-fobjc-arc` is guarded to `APPLE` only; never apply
   it on Linux.
 
