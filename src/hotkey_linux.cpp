@@ -3,7 +3,7 @@
 /// This is the Linux counterpart to hotkey_macos.mm.  It provides the same
 /// interface via `hotkey.hpp`, but implemented with native X11 idioms:
 ///
-///   - Global hotkey  -> XGrabKey (system-wide Ctrl+8), polled on a
+///   - Global hotkey  -> XGrabKey (system-wide Alt+8), polled on a
 ///                       background thread and forwarded as an SDL event.
 ///   - Window show/hide -> SDL_ShowWindow / SDL_HideWindow, plus X input
 ///                         focus save/restore so paste lands back in the
@@ -59,14 +59,14 @@ static Window                g_prev_focus = 0;
 static int x_error_handler(Display*, XErrorEvent*) { return 0; }
 
 // ============================================================================
-// Global hotkey (Ctrl+8) via XGrabKey
+// Global hotkey (Alt+8) via XGrabKey
 // ============================================================================
 
 /// Grab a key/modifier combo (plus caps/num-lock variants) on the root
 /// window so the OS routes KeyPress events to us system-wide.
 static void grab_key_combos(Display* dpy, KeyCode key, unsigned int mods,
                             Window root, bool grab) {
-    // Cover the usual lock-key combinations so Ctrl+8 works regardless of
+    // Cover the usual lock-key combinations so Alt+8 works regardless of
     // Caps Lock / Num Lock state.
     static const unsigned int extra[] = { 0u, LockMask, Mod2Mask,
                                           LockMask | Mod2Mask };
@@ -98,9 +98,9 @@ Uint32 kopi_register_hotkey() {
         const int screen = DefaultScreen(dpy);
         const Window root = RootWindow(dpy, screen);
         const KeyCode key = XKeysymToKeycode(dpy, XK_8);
-        grab_key_combos(dpy, key, ControlMask, root, true);
+        grab_key_combos(dpy, key, Mod1Mask, root, true);   // Mod1 = Alt
         XFlush(dpy);
-        SDL_Log("kopi: global hotkey Ctrl+8 registered");
+        SDL_Log("kopi: global hotkey Alt+8 registered");
 
         XEvent ev;
         while (g_hotkey_running) {
@@ -116,7 +116,7 @@ Uint32 kopi_register_hotkey() {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        grab_key_combos(dpy, key, ControlMask, root, false);
+        grab_key_combos(dpy, key, Mod1Mask, root, false);   // Mod1 = Alt
         XCloseDisplay(dpy);
         g_hotkey_running = false;
     });

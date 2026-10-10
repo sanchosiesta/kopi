@@ -3,12 +3,12 @@
 A graphical clipboard manager with vim keybindings, built in modern C++23.
 
 Works on **macOS** and **Linux** (X11). Summon it with a global hotkey —
-**Cmd+8** on macOS, **Ctrl+8** on Linux — navigate with vim keys, pick an
+**Cmd+8** on macOS, **Alt+8** on Linux — navigate with vim keys, pick an
 item — it pastes directly into your editor.
 
 ## Features
 
-- **Global hotkey** — Cmd+8 (macOS) / Ctrl+8 (Linux) summons kopi from any application
+- **Global hotkey** — Cmd+8 (macOS) / Alt+8 (Linux) summons kopi from any application
 - **Vim keybindings** — `j`/`k` to navigate, `/` to search, `Space` for multi-select, `Enter`/`y`/`l` to pick
 - **Ctrl+J/K** — navigate filtered results while still typing in the search box
 - **Auto-paste** — selecting an item hides kopi, returns focus to your editor, and simulates the paste shortcut automatically
@@ -71,7 +71,7 @@ the window. Press **Ctrl+Q** to quit, or **Ctrl+C** from the terminal.
 ```sh
 ./build/kopi
 ```
-kopi starts hidden. Press **Ctrl+8** or click the **k** in the system tray to
+kopi starts hidden. Press **Alt+8** or click the **k** in the system tray to
 show the window. Press **Ctrl+Q** to quit, or **Ctrl+C** from the terminal.
 
 ## Accessibility Permission (macOS only)
@@ -127,7 +127,7 @@ MIME API; on macOS it uses `NSPasteboard` types.
 |-----------|-------|-------|
 | UI | Dear ImGui 1.91 | Dear ImGui 1.91 |
 | Windowing | SDL3 + Metal | SDL3 + SDL_Renderer |
-| Hotkey | Carbon Event Manager (Cmd+8) | X11 `XGrabKey` (Ctrl+8) |
+| Hotkey | Carbon Event Manager (Cmd+8) | X11 `XGrabKey` (Alt+8) |
 | Paste | CGEvent HID tap | XTest `XTestFakeKeyEvent` |
 | Clipboard poll | `NSPasteboard.changeCount` (O(1)) | FNV-1a hash of clipboard text |
 | MIME | `NSPasteboard` types | SDL3 clipboard MIME API |
