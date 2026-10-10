@@ -195,7 +195,8 @@ static bool init_sdl(SDL_Window*& window, SDL_Renderer*& renderer) {
     {
         ImFontConfig cfg;
         cfg.FontDataOwnedByAtlas = false;  // compressed source is static
-        if (io.Fonts->AddFontFromMemoryCompressedTTF(
+        // The embedded blob is gzip-compressed, so use the Gzip variant.
+        if (io.Fonts->AddFontFromMemoryCompressedTTFGzip(
                 kopi_font::g_font_compressed,
                 kopi_font::g_font_compressed_size, 16.0f, &cfg) != nullptr) {
             font_loaded = true;
