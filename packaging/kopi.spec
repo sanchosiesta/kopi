@@ -31,7 +31,7 @@ system-tray icon; supports rich (HTML/RTF/image) clipboard capture.
 %setup -q
 
 %build
-%cmake -S . -B build
+%cmake
 %cmake_build
 
 %install
@@ -41,5 +41,5 @@ system-tray icon; supports rich (HTML/RTF/image) clipboard capture.
 %{_bindir}/kopi
 
 %changelog
-* %{_source_date} mrsipan <mrsipan@users.noreply.github.com>
+* Thu Oct 09 2025 mrsipan <mrsipan@users.noreply.github.com>
 - initial Fedora/RHEL packaging

@@ -245,8 +245,6 @@ static void cleanup_sdl(SDL_Window* window, SDL_Renderer* renderer) {
 // When search mode is inactive, all vim navigation keys are active.
 
 static bool handle_vim_keys(kopi::App& app, SDL_Window* window, bool& visible) {
-    ImGuiIO& io = ImGui::GetIO();
-
     // ------------------------------------------------------------------
     // Keys that ALWAYS work, even in search mode
     // ------------------------------------------------------------------

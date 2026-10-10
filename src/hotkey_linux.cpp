@@ -72,7 +72,8 @@ static void grab_key_combos(Display* dpy, KeyCode key, unsigned int mods,
                                           LockMask | Mod2Mask };
     for (unsigned int m : extra) {
         if (grab)
-            XGrabKey(dpy, key, mods | m, root, True);
+            XGrabKey(dpy, key, mods | m, root, True,
+                     GrabModeAsync, GrabModeAsync);
         else
             XUngrabKey(dpy, key, mods | m, root);
     }

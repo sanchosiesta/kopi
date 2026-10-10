@@ -16,7 +16,8 @@ echo "==> Setting up the rpmbuild tree"
 mkdir -p "$HOME/rpmbuild"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
 echo "==> Packaging source tarball from git HEAD"
-git -C "$ROOT" archive --format=tar.gz \
+# --prefix creates the top-level kopi-<version>/ dir that %setup expects.
+git -C "$ROOT" archive --format=tar.gz --prefix="$NAME-$VERSION/" \
     -o "$HOME/rpmbuild/SOURCES/$NAME-$VERSION.tar.gz" HEAD
 
 echo "==> Copying the spec into place"
