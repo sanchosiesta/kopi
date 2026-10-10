@@ -1,5 +1,5 @@
 #include "kopi.hpp"
-#include "hotkey_macos.hpp"
+#include "hotkey.hpp"
 
 #include <SDL3/SDL.h>
 

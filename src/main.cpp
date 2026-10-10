@@ -1,4 +1,4 @@
-#include "hotkey_macos.hpp"
+#include "hotkey.hpp"
 #include "kopi.hpp"
 
 #include <SDL3/SDL.h>
@@ -184,11 +184,24 @@ static bool init_sdl(SDL_Window*& window, SDL_Renderer*& renderer) {
     style.GrabRounding = 4.0f;
     style.ScrollbarRounding = 4.0f;
 
-    // Load a good monospace font at a readable size
-    io.Fonts->AddFontFromFileTTF(
-        "/System/Library/Fonts/Menlo.ttc", 16.0f);
-    // Fallback if Menlo isn't found
-    if (io.Fonts->Fonts.empty()) {
+    // Load a good monospace font at a readable size.  Try a few common
+    // paths (macOS first, then Linux distro fonts) and fall back to the
+    // built-in default if none are found.
+    static const char* kFontPaths[] = {
+        "/System/Library/Fonts/Menlo.ttc",                        // macOS
+        "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",            // Debian/Ubuntu
+        "/usr/share/fonts/dejavu-sans-mono/DejaVuSansMono.ttf",  // Fedora
+        "/usr/share/fonts/liberation-mono/LiberationMono-Regular.ttf", // Fedora
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  // older Debian
+    };
+    bool font_loaded = false;
+    for (const char* path : kFontPaths) {
+        if (io.Fonts->AddFontFromFileTTF(path, 16.0f) != nullptr) {
+            font_loaded = true;
+            break;
+        }
+    }
+    if (!font_loaded) {
         io.Fonts->AddFontDefault();
     }
 
@@ -726,6 +739,16 @@ static void render_ui(kopi::App& app, SDL_Window* window, bool& done, bool& visi
         if (ImGui::Checkbox("Capture rich content (HTML/images/etc.)", &mime)) {
             app.set_mime_capture(mime);
         }
+
+#ifdef __linux__
+        // Launch-at-login lives in the tray menu on macOS, so on Linux we
+        // expose it here instead (as a systemd autostart desktop entry).
+        bool login = kopi_is_login_item();
+        if (ImGui::Checkbox("Launch at login", &login)) {
+            kopi_toggle_login_item();
+            login = kopi_is_login_item();  // resync with actual state
+        }
+#endif
 
         // Keybinding hints
         ImGui::TextDisabled(

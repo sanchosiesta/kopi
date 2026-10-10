@@ -36,10 +36,25 @@ set(KOPI_SOURCES
     src/kopi.cpp
 )
 
-# macOS-specific: global hotkey via Carbon
+# --- Platform-specific bits ---
+set(KOPI_EXTRA_LIBS "")
+
+# macOS: global hotkey via Carbon, paste via CGEvent, clipboard via AppKit
 if(APPLE)
     list(APPEND KOPI_SOURCES src/hotkey_macos.mm)
-    set(KOPI_EXTRA_LIBS "-framework Carbon -framework AppKit -framework CoreGraphics -framework ApplicationServices -framework ServiceManagement")
+    list(APPEND KOPI_EXTRA_LIBS
+        "-framework Carbon"
+        "-framework AppKit"
+        "-framework CoreGraphics"
+        "-framework ApplicationServices"
+        "-framework ServiceManagement")
+endif()
+
+# Linux: global hotkey + paste + tray via X11/XTest
+if(LINUX)
+    list(APPEND KOPI_SOURCES src/hotkey_linux.cpp)
+    find_package(X11 REQUIRED)
+    list(APPEND KOPI_EXTRA_LIBS X11::Xtst)
 endif()
 
 add_executable(kopi
@@ -56,8 +71,10 @@ target_include_directories(kopi PRIVATE
 
 target_link_libraries(kopi PRIVATE SDL3::SDL3 ${KOPI_EXTRA_LIBS})
 
-# Enable ARC for Objective-C++ — prevents NSStatusItem from being
-target_compile_options(kopi PRIVATE -fobjc-arc)
+# Enable ARC for Objective-C++ — macOS only.
+if(APPLE)
+    target_compile_options(kopi PRIVATE -fobjc-arc)
+endif()
 
 # macOS: hide from Dock (accessory app)
 if(APPLE)

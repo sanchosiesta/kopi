@@ -2,7 +2,7 @@
 /// Registers Cmd+8 and posts a custom SDL event when pressed.
 /// Handles instant window show/hide, active app tracking, and Cmd+V paste.
 
-#include "hotkey_macos.hpp"
+#include "hotkey.hpp"
 
 #include <SDL3/SDL.h>
 
