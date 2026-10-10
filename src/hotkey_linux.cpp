@@ -269,7 +269,7 @@ void kopi_init_status_bar() {
         dock.xclient.window       = tray;
         dock.xclient.message_type = opcode;
         dock.xclient.format       = 32;
-        dock.xclient.data.l[0]    = CurrentTime;   // time
+        dock.xclient.data.l[0]    = 0;             // time
         dock.xclient.data.l[1]    = 0;             // SYSTEM_TRAY_REQUEST_DOCK
         dock.xclient.data.l[2]    = icon;         // window to dock
         dock.xclient.data.l[3]    = 0;
