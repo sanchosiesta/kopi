@@ -28,7 +28,8 @@ item — it pastes directly into your editor.
 - **macOS 14+** (Sonoma or later), Xcode Command Line Tools, CMake 3.21+
   - **Accessibility permission** — required for auto-paste (see below)
 - **Linux (X11)**, CMake 3.21+, a C++23 compiler (gcc 13+ or clang 16+)
-  - `libsdl3-dev`, `libx11-dev`, `libxtst-dev`
+  - Debian/Ubuntu: `libsdl3-dev`, `libx11-dev`, `libxtst-dev`
+  - Fedora/RHEL: `SDL3-devel`, `libX11-devel`, `libXtst-devel`
   - A system tray for the tray icon (optional — hotkey works without it)
 
 ## Build
@@ -45,13 +46,36 @@ The binary is at `build/kopi.app/Contents/MacOS/kopi`.
 
 ### Linux (Ubuntu/Debian)
 ```sh
-git clone https://github.com/sanchosiesta/kopi.git
-cd kopi
 sudo apt install build-essential cmake libsdl3-dev libx11-dev libxtst-dev
 cmake -B build -S .
 cmake --build build -j$(nproc)
 ```
 The binary is at `build/kopi`.
+
+### Linux (Fedora / RHEL / Rocky)
+```sh
+sudo dnf install gcc-c++ cmake make SDL3-devel libX11-devel libXtst-devel
+cmake -B build -S .
+cmake --build build -j$(nproc)
+```
+The binary is at `build/kopi`.
+
+> **Fedora/RHEL note:** the global hotkey, paste, and tray icon all need an
+> X11 session (not Wayland).  SDL3 is packaged as `SDL3-devel` on Fedora 40+
+> and RHEL 10+; on older releases, install SDL3 from source or via
+> `cmake --build` against a vendored checkout.
+
+### Linux RPM (Fedora / RHEL / Rocky)
+
+Build an installable RPM from this repo:
+```sh
+sudo dnf install gcc-c++ cmake make rpm-build SDL3-devel libXtst-devel libX11-devel
+./packaging/build-rpm.sh
+sudo dnf install ~/rpmbuild/RPMS/x86_64/kopi-1.0.0-*.fc*.x86_64.rpm
+```
+This installs `kopi` to `/usr/bin/kopi`.  Enable **Launch at login** in the
+UI (or the `~/.config/autostart/kopi.desktop` entry it writes) and it will
+start automatically — XFCE's session manager honors that autostart entry.
 
 Dependencies are fetched automatically:
 - **SDL3** — via the system package manager
