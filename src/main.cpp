@@ -1,5 +1,6 @@
 #include "hotkey.hpp"
 #include "kopi.hpp"
+#include "font_data.hpp"
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -8,8 +9,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -184,23 +187,39 @@ static bool init_sdl(SDL_Window*& window, SDL_Renderer*& renderer) {
     style.GrabRounding = 4.0f;
     style.ScrollbarRounding = 4.0f;
 
-    // Load a good monospace font at a readable size.  Try a few common
-    // paths (macOS first, then Linux distro fonts) and fall back to the
-    // built-in default if none are found.
-    static const char* kFontPaths[] = {
-        "/System/Library/Fonts/Menlo.ttc",                        // macOS
-        "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",            // Debian/Ubuntu
-        "/usr/share/fonts/dejavu-sans-mono/DejaVuSansMono.ttf",  // Fedora
-        "/usr/share/fonts/liberation-mono/LiberationMono-Regular.ttf", // Fedora
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  // older Debian
-    };
+    // Load the embedded JuliaMonoSiesta font first so the look is identical
+    // on every OS with no font dependency.  If it somehow fails, fall back to
+    // common OS monospace paths, then to the built-in default.  (Note:
+    // AddFontFromFileTTF asserts on failure, so only pass paths that exist.)
     bool font_loaded = false;
-    for (const char* path : kFontPaths) {
-        if (io.Fonts->AddFontFromFileTTF(path, 16.0f) != nullptr) {
+    {
+        ImFontConfig cfg;
+        cfg.FontDataOwnedByAtlas = false;  // compressed source is static
+        if (io.Fonts->AddFontFromMemoryCompressedTTF(
+                kopi_font::g_font_compressed,
+                kopi_font::g_font_compressed_size, 16.0f, &cfg) != nullptr) {
             font_loaded = true;
-            break;
         }
     }
+
+    if (!font_loaded) {
+        static const std::vector<std::string> kFontPaths = {
+            "/System/Library/Fonts/Menlo.ttc",                          // macOS
+            "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",              // Debian/Ubuntu
+            "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf",   // Fedora
+            "/usr/share/fonts/liberation-mono-fonts/LiberationMono-Regular.ttf", // Fedora
+            "/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Regular.ttf",    // Fedora
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",     // older Debian
+        };
+        for (const std::string& path : kFontPaths) {
+            if (!std::filesystem::exists(path)) continue;
+            if (io.Fonts->AddFontFromFileTTF(path.c_str(), 16.0f) != nullptr) {
+                font_loaded = true;
+                break;
+            }
+        }
+    }
+
     if (!font_loaded) {
         io.Fonts->AddFontDefault();
     }
