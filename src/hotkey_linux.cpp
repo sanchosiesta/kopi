@@ -285,24 +285,6 @@ void kopi_init_status_bar() {
         XFlush(dpy);
         SDL_Log("kopi: tray dock request sent to %ld", (long)tray);
 
-        // Ask the tray to dock us: _NET_SYSTEM_TRAY_OPCODE with the
-        // SYSTEM_TRAY_REQUEST_DOCK (0) message.  Protocol data layout is
-        // { time, message, window }.
-        const Atom opcode = XInternAtom(dpy, "_NET_SYSTEM_TRAY_OPCODE", False);
-        XEvent dock;
-        std::memset(&dock, 0, sizeof(dock));
-        dock.xclient.type         = ClientMessage;
-        dock.xclient.window       = tray;
-        dock.xclient.message_type = opcode;
-        dock.xclient.format       = 32;
-        dock.xclient.data.l[0]    = 0;             // time
-        dock.xclient.data.l[1]    = 0;             // SYSTEM_TRAY_REQUEST_DOCK
-        dock.xclient.data.l[2]    = icon;         // window to dock
-        dock.xclient.data.l[3]    = 0;
-        dock.xclient.data.l[4]    = 0;
-        XSendEvent(dpy, tray, False, NoEventMask, &dock);
-        XFlush(dpy);
-
         // GC + font for the "k".  The tray reparents and maps the icon after
         // docking; we paint it on Expose.
         GC gc = XCreateGC(dpy, icon, 0, nullptr);
