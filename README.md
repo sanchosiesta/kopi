@@ -155,7 +155,7 @@ MIME API; on macOS it uses `NSPasteboard` types.
 | Hotkey | Carbon Event Manager (Cmd+8) | X11 `XGrabKey` (Alt+8) |
 | Paste | CGEvent HID tap | XTest `XTestFakeKeyEvent` |
 | Clipboard poll | `NSPasteboard.changeCount` (O(1)) | FNV-1a hash of clipboard text |
-| Font | embedded JuliaMonoSiesta (subsetted, gzip) | embedded JuliaMonoSiesta (subsetted, gzip) |
+| Font | embedded JuliaMonoSiesta (subsetted, stb_compress) | embedded JuliaMonoSiesta (subsetted, stb_compress) |
 | MIME | `NSPasteboard` types | SDL3 clipboard MIME API |
 | Status icon | `NSStatusItem` | X11 XEmbed tray client |
 | Login item | `SMAppService` | systemd autostart `.desktop` |

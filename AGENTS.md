@@ -80,10 +80,12 @@ configure).  SDL3 is a system package; on Linux it must be SDL3, not SDL2.
 - **Launch at login (Linux)** — toggles a systemd autostart desktop entry at
   `~/.config/autostart/kopi.desktop`; exposed as a checkbox in the UI
   (`#ifdef __linux__` in `main.cpp`).  On macOS it lives in the tray menu.
-- **Font** — an embedded, subsetted + gzip-compressed JuliaMonoSiesta lives in
-  `src/font_data.hpp` and is loaded via `AddFontFromMemoryCompressedTTF`, so
-  the look is identical on every OS.  Regenerate it with
-  `python3 packaging/make-font-header.py` (needs `pip install fonttools`).
+- **Font** — an embedded, subsetted + stb_compress-compressed
+  JuliaMonoSiesta lives in `src/font_data.hpp` and is loaded via
+  `AddFontFromMemoryCompressedTTF`, so the look is identical on every OS.
+  Regenerate it with `python3 packaging/make-font-header.py` (needs
+  `pip install fonttools` + g++).  Use stb_compress, **not** gzip —
+  ImGui's Gzip variant is gone in 1.91.9.
   OS monospace paths are a fallback only; `AddFontDefault()` is the last
   resort.  Note `AddFontFromFileTTF` asserts on failure, so only pass paths
   that exist.
