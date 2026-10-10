@@ -254,6 +254,11 @@ void kopi_init_status_bar() {
         XChangeProperty(dpy, icon, xembed, xembed, 32, PropModeReplace,
                         reinterpret_cast<const unsigned char*>(embed_info), 2);
 
+        // Map the icon before requesting docking — GtkSocket (used by the
+        // xfce tray) embeds a mapped client window.
+        XMapWindow(dpy, icon);
+        XFlush(dpy);
+
         // Ask the tray to dock us: _NET_SYSTEM_TRAY_OPCODE with the
         // SYSTEM_TRAY_REQUEST_DOCK (0) message.  Protocol data layout is
         // { time, message, window }.
