@@ -55,8 +55,14 @@ static Window                g_prev_focus = 0;
 
 /// Xlib error handler: XGrabKey / docking can return BadAccess if another
 /// client already owns the key or tray slot.  We never want those to abort
-/// the app, so swallow them all.
-static int x_error_handler(Display*, XErrorEvent*) { return 0; }
+/// the app, so swallow them all (but log them for diagnosis).
+static int x_error_handler(Display* dpy, XErrorEvent* ev) {
+    char buf[256] = "";
+    XGetErrorText(dpy, ev->error_code, buf, sizeof(buf));
+    SDL_Log("kopi: X error ignored: %s (request=%d.%d resource=0x%lx)",
+            buf, ev->request_code, ev->minor_code, ev->resourceid);
+    return 0;
+}
 
 // ============================================================================
 // Global hotkey (Alt+8) via XGrabKey
