@@ -240,18 +240,76 @@ void kopi_init_status_bar() {
             return;
         }
 
-        // 24x24 icon window.  Inherit depth/visual from the root (robust on
-        // minimal toolbars) and use a light-gray background so the black
-        // "k" stays visible whatever the tray's theme.
+        // The visual the tray would like icons to use.  On composited
+        // desktops (xfce's systray with compositing) the tray hosts icons in
+        // a 32-bit ARGB socket and advertises that here.  A 24-bit icon is
+        // docked but left invisible in such an ARGB socket, so we create our
+        // icon with the tray's visual whenever it is offered.
+        Visual* tray_visual = nullptr;
+        int tray_depth = 0;
+        {
+            const Atom vs = XInternAtom(dpy, "_NET_SYSTEM_TRAY_VISUAL", False);
+            Atom type = 0; int fmt = 0;
+            unsigned long nitems = 0, bytes = 0;
+            unsigned char* prop = nullptr;
+            if (XGetWindowProperty(dpy, tray, vs, 0, 1, False, XA_VISUALID,
+                                   &type, &fmt, &nitems, &bytes, &prop) == 0) {
+                if (prop && fmt == 32) {
+                    unsigned long vid = *reinterpret_cast<unsigned long*>(prop);
+                    int nvis = 0;
+                    XVisualInfo tmpl; tmpl.visualid = vid;
+                    XVisualInfo* vi = XGetVisualInfo(dpy, VisualIDMask, &tmpl, &nvis);
+                    if (vi && nvis > 0) {
+                        tray_visual = vi[0].visual;
+                        tray_depth = vi[0].depth;
+                        XFree(vi);
+                    }
+                }
+                if (prop) XFree(prop);
+            }
+        }
+
+        // 24x24 icon window.  Use a light-gray background so the black "k"
+        // stays visible whatever the tray's theme.  Prefer the tray's
+        // advertised visual (ARGB) so the icon matches the tray's socket;
+        // fall back to the root visual on trays that advertise none or on
+        // servers that cannot host an ARGB child of the 24-bit root.
         XSetWindowAttributes attrs;
         std::memset(&attrs, 0, sizeof(attrs));
         attrs.event_mask       = ButtonPressMask | StructureNotifyMask |
                                 ExposureMask;
         attrs.background_pixel = 0xE0E0E0;
-        const Window icon = XCreateWindow(
-            dpy, root, 0, 0, 24, 24,
-            0, CopyFromParent, InputOutput, CopyFromParent,
-            CWEventMask | CWBackPixel, &attrs);
+        Window icon = 0;
+        bool used_tray_visual = false;
+        if (tray_visual && tray_depth != 0) {
+            icon = XCreateWindow(
+                dpy, root, 0, 0, 24, 24,
+                0, tray_depth, InputOutput, tray_visual,
+                CWEventMask | CWBackPixel, &attrs);
+            XSync(dpy, False);   // surface any BadMatch (no compositor)
+            Window r, p; Window* kids = nullptr; unsigned int n = 0;
+            if (XQueryTree(dpy, icon, &r, &p, &kids, &n))
+                used_tray_visual = true;
+            if (kids) XFree(kids);
+            if (!used_tray_visual)
+                icon = 0;   // create failed — fall back below
+        }
+        if (!icon) {
+            icon = XCreateWindow(
+                dpy, root, 0, 0, 24, 24,
+                0, CopyFromParent, InputOutput, CopyFromParent,
+                CWEventMask | CWBackPixel, &attrs);
+        }
+        if (used_tray_visual) {
+            SDL_Log("kopi: tray icon uses the tray's %d-bit visual", tray_depth);
+        } else if (tray_visual && tray_depth != 0) {
+            SDL_Log("kopi WARNING: tray wants an ARGB (%d-bit) icon but the "
+                    "server cannot host one under the %d-bit root; "
+                    "the tray icon may not appear", tray_depth,
+                    DefaultDepth(dpy, screen));
+        } else {
+            SDL_Log("kopi: tray icon uses the root visual");
+        }
 
         // _XEMBED_INFO = { version 0, mapped 1 }.  Per the XEmbed convention
         // the property TYPE is the _XEMBED_INFO atom itself.

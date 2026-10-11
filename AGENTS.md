@@ -77,6 +77,12 @@ configure).  SDL3 is a system package; on Linux it must be SDL3, not SDL2.
 - **Tray icon (Linux)** — raw X11 XEmbed client.  Left-click toggles the
   window, right-click quits.  Gracefully skips if no system tray is present
   (hotkey still works).  No dropdown menu (unlike macOS).
+  - Reads `_NET_SYSTEM_TRAY_VISUAL` and creates the icon window with that
+    (ARGB) visual when the tray advertises one — a 24-bit icon is docked but
+    left invisible in a 32-bit ARGB socket.  Falls back to `CopyFromParent`
+    (root visual) on plain trays, and warns when the server cannot host an
+    ARGB child of the %d-bit root (e.g. no compositor).  Do not "simplify"
+    this back to `CopyFromParent` only.
 - **Launch at login (Linux)** — toggles a systemd autostart desktop entry at
   `~/.config/autostart/kopi.desktop`; exposed as a checkbox in the UI
   (`#ifdef __linux__` in `main.cpp`).  On macOS it lives in the tray menu.
